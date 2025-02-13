@@ -1,0 +1,13 @@
+{
+    "name": "lftkryo-jam",
+    "description": "lftkryo: Making 8-bit Music From Scratch at the Commodore 64 BASIC Prompt",
+    "toolkit": "basic",
+    "sources": [
+        "src/main.bas"
+    ],
+    "build": "debug",
+    "definitions": [],
+    "includes": [],
+    "args": [],
+    "compiler": ""
+}
