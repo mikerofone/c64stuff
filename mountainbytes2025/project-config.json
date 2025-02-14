@@ -1,0 +1,13 @@
+{
+    "name": "mountainbytes2025",
+    "description": "Project mountainbytes2025",
+    "toolkit": "kick",
+    "sources": [
+        "src/main.asm"
+    ],
+    "build": "debug",
+    "definitions": [],
+    "includes": [],
+    "args": [],
+    "compiler": ""
+}
