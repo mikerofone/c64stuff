@@ -54,7 +54,7 @@ flicker:
         // Move cursor right by # chars printed.
         jsr advance_cursor
         // jsr update_coords
-        // ldx #100
+        // ldx #10
         // jsr wait
 
         jsr cycle_color
@@ -120,10 +120,13 @@ advance_cursor:
         clc                     // Prepare addition.
         adc zpw_cursoraddr      // Add cursor lo byte to # chars in A.
         sta zpw_cursoraddr      // Update cursor lo byte.
-        bcc !return+            // If no overflow, no need to increment hi byte.
+        bcc maybe_wrap_cursor   // If no overflow, no need to increment hi byte.
         ldy zpw_cursoraddr+1    // Load cursor hi byte, increment and write back.
         iny
         sty zpw_cursoraddr+1
+// If the cursor goes off screen, wrap it around. Clobbers A and Y.
+maybe_wrap_cursor:
+        ldy zpw_cursoraddr+1    // Load cursor hi byte.
         // If zpw_cursoraddr > $03E8, then wrap it around.
         cpy #$03                // Compare hi byte.
         bcc !return+            // Carry not set -> hi byte is < $02.
