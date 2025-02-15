@@ -2,7 +2,7 @@ BasicUpstart2(main)
 
 .const screen_base = $0400
 .const color_base = $D800
-
+.const border_color_addr = $D020
 // We don't use BASIC, so make use of the entire zero page starting at $02.
 .var next_zp = $02
 // Reserve a zero space address for a byte.
@@ -30,15 +30,18 @@ main:
         // Init row and col.
         lda #2
         sta zpb_targetrow
-        pha                          // Push to stack so it can be recovered later.
+        pha                             // Push to stack so it can be recovered later.
         lda #7
         sta zpb_targetcol
-        pha                          // Push to stack so it can be recovered later.
+        pha                             // Push to stack so it can be recovered later.
         // Init color.
         lda #00
+        sta border_color_addr           // Border to black.
+        sta border_color_addr+1         // Background to black.
+        lda #01                         // Don't use black for forground.
         sta zpb_color
+        jsr clearscreen
 flicker:
-        // jsr clearscreen
 
         // Recover last values from stack, first col, then row.
         pla
@@ -67,17 +70,21 @@ flicker:
         lda zpb_targetcol
         pha
 
-        // Cycle colors.
+        jsr cycle_color
+
+        jmp flicker
+
+// Cycles colors through 1-16.
+cycle_color:
         lda zpb_color
         ldx #01
         ldy #16
         jsr add_and_clamp
         sta zpb_color
-
-        jmp flicker
-
-cycle_color:
-
+        bne !+                          // If zero (black), increment.
+        inc zpb_color
+!:
+        rts
 
 // Gets row and col from zpb_targetrow/zpb_targetcol, increments them
 // by some value and clamping to range, and writes them back.
