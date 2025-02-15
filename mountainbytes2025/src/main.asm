@@ -3,6 +3,9 @@ BasicUpstart2(main)
 .const screen_base = $0400
 .const color_base = $D800
 .const border_color_addr = $D020
+
+.const sprite_0_pointer_addr = $07F8
+
 // We don't use BASIC, so make use of the entire zero page starting at $02.
 .var next_zp = $02
 // Reserve a zero space address for a byte.
@@ -24,18 +27,31 @@ BasicUpstart2(main)
 .const zpb_color = res_zpb()            // Param: Color to use for writing text.
 .const zpb_tempval = res_zpb()          // Local: Temporary byte that might get clobbered by any
                                         //        jump to subroutine.
+.const zpw_tempaddr = res_zpw()         // Local: Temporary address that might get clobbered by
+                                        //        jump to subroutine.
 
         *=$4000 "Code"
 
 main:
         // Init color.
         lda #00
-        // sta border_color_addr           // Border to black.
+        sta border_color_addr           // Border to black.
         sta border_color_addr+1         // Background to black.
         lda #01                         // Don't use black for foreground.
         sta zpb_color
         jsr clearscreen
+create_sprite:
+        // Point sprite pointer for sprite 0 to start of screen RAM, so it'll show changing garbage.
+        lda #$F8                        // Sprite pointer lo byte.
+        sta sprite_0_pointer_addr
+        lda #$07                        // Sprite pointer hi byte.
+        sta sprite_0_pointer_addr+1
 flicker:
+// wobble:
+//         lda $D012
+//         eor #7
+//         sta $D016
+        
         lda #<txtmike
         sta zpw_textaddr
         lda #>txtmike
@@ -54,8 +70,8 @@ flicker:
         // Move cursor right by # chars printed.
         jsr advance_cursor
         // jsr update_coords
-        // ldx #10
-        // jsr wait
+        ldx #1
+        jsr wait
 
         jsr cycle_color
 
@@ -64,6 +80,7 @@ flicker:
 // Cycles colors through 1-16.
 cycle_color:
         lda zpb_color
+        sta border_color_addr           // Border to previous color.
         ldx #01
         ldy #15
         jsr add_and_clamp
