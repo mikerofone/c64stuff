@@ -1,6 +1,7 @@
 BasicUpstart2(main)
 
 .const screen_base = $0400
+.const color_base = $D800
 
 // We don't use BASIC, so make use of the entire zero page starting at $02.
 .var next_zp = $02
@@ -17,7 +18,9 @@ BasicUpstart2(main)
 .const zpw_textaddr = res_zpw()         // Param: Address of text to display
 .const zpb_targetrow = res_zpb()        // Param: Screen row to start printing at (0-24)
 .const zpb_targetcol = res_zpb()        // Param: Screen column to start printing at (0-39) 
-.const zpw_targetaddr = res_zpw()       // Local: Address computed from (targetrow, targetcol).
+.const zpw_screenaddr = res_zpw()       // Local: Screen RAM address computed from (targetrow, targetcol).
+.const zpw_coloraddr = res_zpw()        // Local: Color RAM address computed from (targetrow, targetcol).
+.const zpb_color = res_zpb()            // Param: Color to use for writing text.
 .const zpb_tempval = res_zpb()          // Local: Temporary byte that might get clobbered by any
                                         //        jump to subroutine.
 
@@ -31,6 +34,9 @@ main:
         lda #7
         sta zpb_targetcol
         pha                          // Push to stack so it can be recovered later.
+        // Init color.
+        lda #00
+        sta zpb_color
 flicker:
         // jsr clearscreen
 
@@ -61,7 +67,17 @@ flicker:
         lda zpb_targetcol
         pha
 
+        // Cycle colors.
+        lda zpb_color
+        ldx #01
+        ldy #16
+        jsr add_and_clamp
+        sta zpb_color
+
         jmp flicker
+
+cycle_color:
+
 
 // Gets row and col from zpb_targetrow/zpb_targetcol, increments them
 // by some value and clamping to range, and writes them back.
@@ -148,46 +164,59 @@ wait:
 // Print the text starting at address in zpw_textaddr to the screen at coordinates
 // zpb_targetrow and zpb_targetcol.
 printtext:
-        // Assemble screen address.
-        lda #>screen_base       // Init zpw_targetaddr with base address.
-                                // Start with hi byte so we can keep using lo byte.
-        sta zpw_targetaddr + 1
-        lda #<screen_base       
-        sta zpw_targetaddr
-        ldx zpb_targetrow        // Load remaining rows.
+        // Assemble addresses for screen and color. Only hi byte differs, lo byte
+        // can be shared for both screen and color.
+        lda #>screen_base       // Init zpw_screenaddr.
+        sta zpw_screenaddr + 1
+        lda #>color_base        // Init zpw_coloraddr.
+        sta zpw_coloraddr + 1
+        lda #<screen_base       // Low bytes for screen and color must be the same!
+        sta zpw_screenaddr
+        sta zpw_coloraddr
+        ldx zpb_targetrow       // Load remaining rows.
 add_rows:
         cpx #00                 // Test if more rows.
         beq rows_done           // If none, skip.
         clc                     // Prepare addition.
         adc #40                 // Add a line's worth of chars.
-        sta zpw_targetaddr       // Update zpw_targetaddr
+        sta zpw_screenaddr      // Update screen and color address lo bytes.
+        sta zpw_coloraddr 
         dex                     // Substract row.
         bcc add_rows            // If no overflow, no need to increment hi byte.
-        ldy zpw_targetaddr+1     // Load hi byte
-        iny                     // and increment.
-        sty zpw_targetaddr+1     // Write hibyte back.
+        ldy zpw_screenaddr+1    // Load screen/color hi bytes, increment and write back.
+        iny
+        sty zpw_screenaddr+1
+        ldy zpw_coloraddr+1
+        iny
+        sty zpw_coloraddr+1
         jmp add_rows
 rows_done:
-        lda zpw_targetaddr       // Ensure lo byte is in A.
+        lda zpw_screenaddr      // Ensure lo byte is in A.
         clc                     // Prepare addition.
-        adc zpb_targetcol        // Add column chars.
-        sta zpw_targetaddr       // Update zpw_targetaddr
-        bcc copy_chars           // If no overflow, no need to increment hi byte.
-        ldy zpw_targetaddr+1     // Load hi byte
-        iny                     // and increment.
-        sty zpw_targetaddr+1     // Write hibyte back.
+        adc zpb_targetcol       // Add column chars.
+        sta zpw_screenaddr      // Update lo bytes for screen and color.
+        sta zpw_coloraddr
+        bcc copy_chars          // If no overflow, no need to increment hi byte.
+        ldy zpw_screenaddr+1    // Load screen/color hi bytes, increment and write back.
+        iny
+        sty zpw_screenaddr+1
+        ldy zpw_coloraddr+1
+        iny
+        sty zpw_coloraddr+1
 
 copy_chars:
-        ldy #$00        // Counter for indexing through characters.
+        ldy #$00                // Counter for indexing through characters.
 nextchar:
-        lda (zpw_textaddr),Y        // Load current char into A.
-        cmp #$00        // Is end of string?
-        beq endstring   // If not, jump over return.
-        sta (zpw_targetaddr),Y       // Write to indexed screen target.
+        lda (zpw_textaddr),Y    // Load current char into A.
+        cmp #$00                // Is end of string?
+        beq endstring           // If not, jump over return.
+        sta (zpw_screenaddr),Y  // Write to indexed screen target.
+        lda zpb_color           // Load color to use.
+        sta (zpw_coloraddr),Y   // Write to indexed color target.
         iny
         jmp nextchar
 endstring:
-        rts             // Done, return.
+        rts                     // Done, return.
 
         *=$1000 "Data"
 txtstart:
