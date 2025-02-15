@@ -1,0 +1,13 @@
+== TurboWobbel2k - A n00b's first C64 assembly demo ==
+
+From 0 to first C64 assembler program and demo in under #$30 hours. It ain't much, but it was honest work!
+
+Thanks to the MountainBytes crew for specifically welcoming and encouraging n00bs to join, learn and become 1337 overnight! <3
+And thanks for my neighbors and new friends for the support rendered as I tried to get a grip on 8-bit registers in the presence of 16 bit addresses.
+
+Tools used:
+* Visual Studio Code with the excellent CS64 extension (https://github.com/rolandshacks/vs64)
+* KickAssembler compiler (https://theweb.dk/KickAssembler)
+* Vice emulator for running and debugging (https://vice-emu.sourceforge.io/)
+* An IntelliMouse Explorer 3.0 mouse that I've been using for 22 years. Here's to 22 more!
+* A laptop propped up on cardboard boxes because ｅｒｇｏｎｏｍｉｃｓ
