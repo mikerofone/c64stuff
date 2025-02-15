@@ -18,24 +18,33 @@ BasicUpstart2(main)
 .const zpb_targetrow = res_zpb()        // Param: Screen row to start printing at (0-24)
 .const zpb_targetcol = res_zpb()        // Param: Screen column to start printing at (0-39) 
 .const zpw_targetaddr = res_zpw()       // Local: Address computed from (targetrow, targetcol).
-.const zpb_temp1 = res_zpb()            // Local: Temporary byte that might get clobbered by any
+.const zpb_tempval = res_zpb()          // Local: Temporary byte that might get clobbered by any
                                         //        jump to subroutine.
 
         *=$4000 "Code"
 
 main:
         // Init row and col.
-        lda #0
+        lda #2
         sta zpb_targetrow
-        lda #0
+        pha                          // Push to stack so it can be recovered later.
+        lda #7
         sta zpb_targetcol
+        pha                          // Push to stack so it can be recovered later.
 flicker:
+        // jsr clearscreen
+
+        // Recover last values from stack, first col, then row.
+        pla
+        sta zpb_targetcol
+        pla
+        sta zpb_targetrow
         lda #<txtmike
         sta zpw_textaddr
         lda #>txtmike
         sta zpw_textaddr+1
         jsr printtext
-        jsr update_coords
+        jsr update_coords       // Or jsr down_one_line?
 
         lda #<txtmountain
         sta zpw_textaddr
@@ -43,11 +52,19 @@ flicker:
         sta zpw_textaddr+1
         jsr printtext
         jsr update_coords
-        
+        // ldx #100
+        // jsr wait
+
+        // Save coords to stack so zpb_target{row,col} can be clobbered.
+        lda zpb_targetrow
+        pha
+        lda zpb_targetcol
+        pha
+
         jmp flicker
 
-// Gets row and col from zpb_targetrow/zpb_targetcol, increments by
-// 7 (col) / 3 (row) clamping to value range, and writes them back.
+// Gets row and col from zpb_targetrow/zpb_targetcol, increments them
+// by some value and clamping to range, and writes them back.
 update_coords:
         lda zpb_targetrow
         ldx #03
@@ -56,32 +73,80 @@ update_coords:
         sta zpb_targetrow
         lda zpb_targetcol
         ldx #07
-        ldx #40
+        ldx #40                 // Bug: should be ldy, but results in
+                                // more interesting output. ¯\_(ツ)_/¯
         jsr add_and_clamp
         sta zpb_targetcol
         rts
+
+
+// Move cursor down one line, wrapping around the screen.
+down_one_line:
+        lda zpb_targetrow
+        ldx #01
+        ldy #25
+        jsr add_and_clamp
+        sta zpb_targetrow
+        rts
+
 
 // Have value to inc in A, amount to inc in X and max value in Y.
 // Returns new value in A.
 // Will return garbage if A+X>255.
 add_and_clamp:
-        stx zpb_temp1
+        stx zpb_tempval
         clc
-        adc zpb_temp1
+        adc zpb_tempval
         // A now is A+X
-        sty zpb_temp1
-        cmp zpb_temp1   // Will set carry if A>=zpb_temp1
+        sty zpb_tempval
+        cmp zpb_tempval // Will set carry if A>=zpb_tempval
         bcc !return+    // A+X < Y, so return.
-        sbc zpb_temp1   // A=A-Y
+        sbc zpb_tempval // A=A-Y
 !return:
         rts
 
+// Fills the screen with spaces. Clobbers zpb_targetcol/row and zpb_textaddr.
 clearscreen:
-        ldx #$00
+        lda #<txtemptyblock
+        sta zpw_textaddr
+        lda #>txtemptyblock
+        sta zpw_textaddr+1
+        // Step through rows in 5-increments, and paste a 5-row string of spaces.
+        lda #00
+        sta zpb_targetcol
+        sta zpb_targetrow               // Start at row 0.
+        jsr printtext
+        lda #05
+        sta zpb_targetrow
+        jsr printtext
+        lda #10
+        sta zpb_targetrow
+        jsr printtext
+        lda #15
+        sta zpb_targetrow
+        jsr printtext
+        lda #20
+        sta zpb_targetrow
+        jsr printtext
+        rts
 
+// Waits for a while, determined by value in X.
+wait:
+!loop:        
+        cpx #00
+        beq !end+
+        ldy #255
+        dex
+!loop:
+        dey
+        cpy #00
+        bne !loop-
+        jmp !loop--
+!end:
+        rts
 
 // Print the text starting at address in zpw_textaddr to the screen at coordinates
-// zpb_targetrow and zp_targercol.
+// zpb_targetrow and zpb_targetcol.
 printtext:
         // Assemble screen address.
         lda #>screen_base       // Init zpw_targetaddr with base address.
@@ -92,7 +157,7 @@ printtext:
         ldx zpb_targetrow        // Load remaining rows.
 add_rows:
         cpx #00                 // Test if more rows.
-        beq cols_done           // If none, skip.
+        beq rows_done           // If none, skip.
         clc                     // Prepare addition.
         adc #40                 // Add a line's worth of chars.
         sta zpw_targetaddr       // Update zpw_targetaddr
@@ -102,18 +167,18 @@ add_rows:
         iny                     // and increment.
         sty zpw_targetaddr+1     // Write hibyte back.
         jmp add_rows
-cols_done:
+rows_done:
         lda zpw_targetaddr       // Ensure lo byte is in A.
         clc                     // Prepare addition.
         adc zpb_targetcol        // Add column chars.
         sta zpw_targetaddr       // Update zpw_targetaddr
-        bcc rows_done           // If no overflow, no need to increment hi byte.
+        bcc copy_chars           // If no overflow, no need to increment hi byte.
         ldy zpw_targetaddr+1     // Load hi byte
         iny                     // and increment.
         sty zpw_targetaddr+1     // Write hibyte back.
-rows_done:
-        ldy #$00        // Counter for indexing through characters.
 
+copy_chars:
+        ldy #$00        // Counter for indexing through characters.
 nextchar:
         lda (zpw_textaddr),Y        // Load current char into A.
         cmp #$00        // Is end of string?
@@ -127,8 +192,11 @@ endstring:
         *=$1000 "Data"
 txtstart:
 txtmike:
-        .text "mikerofone "
+        .text "mikerofone"
         .byte 0
 txtmountain:
-        .text "at mountainbytes "
+        .text "at mountainbytes"
+        .byte 0
+txtemptyblock:  // Can be printed five times to fill the entire screen.
+        .fill 200, ' '
         .byte 0
