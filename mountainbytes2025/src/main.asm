@@ -2,71 +2,93 @@ BasicUpstart2(main)
 
 .const screen_base = $0400
 
-.const zp_textaddr = $10
-.const zp_targetrow = $12
-.const zp_targetcol = $13
-.const zp_targetaddr = $14
+// We don't use BASIC, so make use of the entire zero page starting at $02.
+.var next_zp = $02
+// Reserve a zero space address for a byte.
+.function res_zpb() {
+        .return next_zp++
+}
+// Reserve a zero space address for a word.
+.function res_zpw() {
+        .eval next_zp++
+        .return next_zp++ - 1
+}
+// zpw: Word (address), zpb: Byte
+.const zpw_textaddr = res_zpw()       // Param: Address of text to display
+.const zpb_targetrow = res_zpb()      // Param: Screen row to start printing at (0-24)
+.const zpb_targetcol = res_zpb()      // Param: Screen column to start printing at (0-39) 
+.const zpw_targetaddr = res_zpw()     // Local: Address computed from (targetrow, targetcol).
 
 
         *=$4000 "Code"
 
 main:
         lda #<txtmike
-        sta zp_textaddr
+        sta zpw_textaddr
         lda #>txtmike
-        sta zp_textaddr+1
+        sta zpw_textaddr+1
         lda #10
-        sta zp_targetrow
+        sta zpb_targetrow
         lda #20
-        sta zp_targetcol
-        
+        sta zpb_targetcol
         jsr printtext
-        rts
+
+        lda #<txtmountain
+        sta zpw_textaddr
+        lda #>txtmountain
+        sta zpw_textaddr+1
+        lda #14
+        sta zpb_targetrow
+        lda #5
+        sta zpb_targetcol
+        jsr printtext
+        
+        jmp * // End of program
 
 
 clearscreen:
         ldx #$00
 
 
-// TODO
+// Print the text starting at address in zpw_textaddr to the screen at coordinates
+// zpb_targetrow and zp_targercol.
 printtext:
         // Assemble screen address.
-        lda #>screen_base       // Init zp_targetaddr with base address.
+        lda #>screen_base       // Init zpw_targetaddr with base address.
                                 // Start with hi byte so we can keep using lo byte.
-        sta zp_targetaddr + 1
+        sta zpw_targetaddr + 1
         lda #<screen_base       
-        sta zp_targetaddr
-        ldx zp_targetrow        // Load remaining rows.
+        sta zpw_targetaddr
+        ldx zpb_targetrow        // Load remaining rows.
 add_rows:
         cpx #00                 // Test if more rows.
         beq cols_done           // If none, skip.
         clc                     // Prepare addition.
         adc #40                 // Add a line's worth of chars.
-        sta zp_targetaddr       // Update zp_targetaddr
+        sta zpw_targetaddr       // Update zpw_targetaddr
         dex                     // Substract row.
         bcc add_rows            // If no overflow, no need to increment hi byte.
-        ldy zp_targetaddr+1     // Load hi byte
+        ldy zpw_targetaddr+1     // Load hi byte
         iny                     // and increment.
-        sty zp_targetaddr+1     // Write hibyte back.
+        sty zpw_targetaddr+1     // Write hibyte back.
         jmp add_rows
 cols_done:
-        lda zp_targetaddr       // Ensure lo byte is in A.
+        lda zpw_targetaddr       // Ensure lo byte is in A.
         clc                     // Prepare addition.
-        adc zp_targetcol        // Add column chars.
-        sta zp_targetaddr       // Update zp_targetaddr
+        adc zpb_targetcol        // Add column chars.
+        sta zpw_targetaddr       // Update zpw_targetaddr
         bcc rows_done           // If no overflow, no need to increment hi byte.
-        ldy zp_targetaddr+1     // Load hi byte
+        ldy zpw_targetaddr+1     // Load hi byte
         iny                     // and increment.
-        sty zp_targetaddr+1     // Write hibyte back.
+        sty zpw_targetaddr+1     // Write hibyte back.
 rows_done:
-
         ldy #$00        // Counter for indexing through characters.
 
 nextchar:
-        lda (zp_textaddr),Y        // Load current char into A.
+        lda (zpw_textaddr),Y        // Load current char into A.
         cmp #$00        // Is end of string?
         beq endstring   // If not, jump over return.
-        sta (zp_targetaddr),Y       // Write to indexed screen target.
+        sta (zpw_targetaddr),Y       // Write to indexed screen target.
         iny
         jmp nextchar
 endstring:
