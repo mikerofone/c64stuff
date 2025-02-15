@@ -14,37 +14,67 @@ BasicUpstart2(main)
         .return next_zp++ - 1
 }
 // zpw: Word (address), zpb: Byte
-.const zpw_textaddr = res_zpw()       // Param: Address of text to display
-.const zpb_targetrow = res_zpb()      // Param: Screen row to start printing at (0-24)
-.const zpb_targetcol = res_zpb()      // Param: Screen column to start printing at (0-39) 
-.const zpw_targetaddr = res_zpw()     // Local: Address computed from (targetrow, targetcol).
-
+.const zpw_textaddr = res_zpw()         // Param: Address of text to display
+.const zpb_targetrow = res_zpb()        // Param: Screen row to start printing at (0-24)
+.const zpb_targetcol = res_zpb()        // Param: Screen column to start printing at (0-39) 
+.const zpw_targetaddr = res_zpw()       // Local: Address computed from (targetrow, targetcol).
+.const zpb_temp1 = res_zpb()            // Local: Temporary byte that might get clobbered by any
+                                        //        jump to subroutine.
 
         *=$4000 "Code"
 
 main:
+        // Init row and col.
+        lda #0
+        sta zpb_targetrow
+        lda #0
+        sta zpb_targetcol
+flicker:
         lda #<txtmike
         sta zpw_textaddr
         lda #>txtmike
         sta zpw_textaddr+1
-        lda #10
-        sta zpb_targetrow
-        lda #20
-        sta zpb_targetcol
         jsr printtext
+        jsr update_coords
 
         lda #<txtmountain
         sta zpw_textaddr
         lda #>txtmountain
         sta zpw_textaddr+1
-        lda #14
-        sta zpb_targetrow
-        lda #5
-        sta zpb_targetcol
         jsr printtext
+        jsr update_coords
         
-        jmp * // End of program
+        jmp flicker
 
+// Gets row and col from zpb_targetrow/zpb_targetcol, increments by
+// 7 (col) / 3 (row) clamping to value range, and writes them back.
+update_coords:
+        lda zpb_targetrow
+        ldx #03
+        ldy #25
+        jsr add_and_clamp
+        sta zpb_targetrow
+        lda zpb_targetcol
+        ldx #07
+        ldx #40
+        jsr add_and_clamp
+        sta zpb_targetcol
+        rts
+
+// Have value to inc in A, amount to inc in X and max value in Y.
+// Returns new value in A.
+// Will return garbage if A+X>255.
+add_and_clamp:
+        stx zpb_temp1
+        clc
+        adc zpb_temp1
+        // A now is A+X
+        sty zpb_temp1
+        cmp zpb_temp1   // Will set carry if A>=zpb_temp1
+        bcc !return+    // A+X < Y, so return.
+        sbc zpb_temp1   // A=A-Y
+!return:
+        rts
 
 clearscreen:
         ldx #$00
@@ -97,8 +127,8 @@ endstring:
         *=$1000 "Data"
 txtstart:
 txtmike:
-        .text "mikerofone"
+        .text "mikerofone "
         .byte 0
 txtmountain:
-        .text "at mountainbytes"
+        .text "at mountainbytes "
         .byte 0
