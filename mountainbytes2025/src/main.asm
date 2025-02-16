@@ -122,7 +122,7 @@ delayed_main_loop:
         lda #00                         // Reset delay timer.
         sta zpb_delayctr
         inc zpb_wobble_mode_counter     // Tick wobble counter. On overflow go to next wobble mode.
-        bcc !+
+        bne !+
         inc zpb_wobble_mode
         lda zpb_wobble_mode
         cmp #04                         // Cycle through the four modes.
@@ -491,4 +491,4 @@ txt2k:
 sinetable:
         .fill 256, 127.5 + 80.5*sin(toRadians(i*360/256))
 flatsine:
-        .fill 256, 3.5 + 3.5*sin(toRadians(180 + i*720/256))
+        .fill 256, 3.5 + 3.5*sin(toRadians(i*720/256))
