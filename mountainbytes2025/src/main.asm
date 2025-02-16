@@ -5,6 +5,13 @@ BasicUpstart2(main)
 .const border_color_addr = $D020
 
 .const sprite_0_pointer_addr = $07F8
+.const sprite_0_xpos = $D000
+.const sprite_0_ypos = $D001
+.const sprite_0_color = $D027
+.const sprite_enable = $D015
+.const sprite_double_x = $D01D
+.const sprite_double_y = $D017
+
 
 // We don't use BASIC, so make use of the entire zero page starting at $02.
 .var next_zp = $02
@@ -27,8 +34,8 @@ BasicUpstart2(main)
 .const zpb_color = res_zpb()            // Param: Color to use for writing text.
 .const zpb_tempval = res_zpb()          // Local: Temporary byte that might get clobbered by any
                                         //        jump to subroutine.
-.const zpw_tempaddr = res_zpw()         // Local: Temporary address that might get clobbered by
-                                        //        jump to subroutine.
+.const zpb_delayctr = res_zpb()         // Global: Delay counter that increases every main loop.
+                                        //         
 
         *=$4000 "Code"
 
@@ -42,10 +49,25 @@ main:
         jsr clearscreen
 create_sprite:
         // Point sprite pointer for sprite 0 to start of screen RAM, so it'll show changing garbage.
-        lda #$F8                        // Sprite pointer lo byte.
+        lda #$80                        // Sprite address / 16 => $2000/$40=$80
         sta sprite_0_pointer_addr
-        lda #$07                        // Sprite pointer hi byte.
-        sta sprite_0_pointer_addr+1
+        lda #40
+        sta sprite_0_xpos               // X position sprite #0
+        sta sprite_0_ypos               // Y position sprite #0
+        lda #04
+        sta sprite_0_color
+
+        // lda $D010                       // load X-MSB
+        // ora #%00000001                  // set extra bit for sprite #0
+        // sta $D010                       // write X-MSB register
+
+        lda sprite_enable               // load X-MSB
+        ora #%00000001                  // set enable bit for sprite #0
+        sta sprite_enable               // write X-MSB register
+        sta sprite_double_x             // Set double-X mode
+        sta sprite_double_y             // Set double-Y mode
+
+        
 flicker:
 // wobble:
 //         lda $D012
@@ -254,7 +276,7 @@ endstring:
         tya                     // Copy # of chars printed from Y to A.
         rts                     // Done, return.
 
-        *=$1000 "Data"
+        *=$1000 "Textdata"
 txtstart:
 txtmike:
         .text "mikerofone "
@@ -265,3 +287,18 @@ txtmountain:
 txtemptyblock:  // Can be printed five times to fill the entire screen.
         .fill 200, ' '
         .byte 0
+
+        *=$2000 "Sprites"
+        // 1 sprites generated with spritemate on 2/16/2025, 12:24:26 AM
+        // Byte 64 of each sprite contains multicolor (high nibble) & color (low nibble) information
+
+        // sprite 0 / singlecolor / color: $04
+        sprite_0:
+        .byte $00,$00,$00,$00,$00,$00,$00,$08
+        .byte $00,$00,$1c,$00,$00,$3e,$00,$00
+        .byte $7f,$00,$00,$ff,$80,$01,$ff,$c0
+        .byte $03,$ff,$e0,$07,$ff,$f0,$0f,$ff
+        .byte $f8,$1f,$ff,$fc,$1f,$ff,$fc,$1f
+        .byte $ff,$fc,$1f,$ff,$fc,$0f,$f7,$f8
+        .byte $07,$e3,$f0,$03,$c1,$e0,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$04
