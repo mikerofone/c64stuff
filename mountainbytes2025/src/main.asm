@@ -8,9 +8,22 @@ BasicUpstart2(main)
 .const sprite_0_xpos = $D000
 .const sprite_0_ypos = $D001
 .const sprite_0_color = $D027
+.const sprite_1_pointer_addr = $07F9
+.const sprite_1_xpos = $D002
+.const sprite_1_ypos = $D003
+.const sprite_1_color = $D028
+.const sprite_2_pointer_addr = $07FA
+.const sprite_2_xpos = $D004
+.const sprite_2_ypos = $D005
+.const sprite_2_color = $D029
+.const sprite_3_pointer_addr = $07FB
+.const sprite_3_xpos = $D006
+.const sprite_3_ypos = $D007
+.const sprite_3_color = $D02A
 .const sprite_enable = $D015
 .const sprite_double_x = $D01D
 .const sprite_double_y = $D017
+.const sprite_center_y_pos = 120
 
 
 // We don't use BASIC, so make use of the entire zero page starting at $02.
@@ -35,7 +48,7 @@ BasicUpstart2(main)
 .const zpb_tempval = res_zpb()          // Local: Temporary byte that might get clobbered by any
                                         //        jump to subroutine.
 .const zpb_delayctr = res_zpb()         // Global: Delay counter that increases every main loop.
-                                        //         
+.const zpb_sine_table_idx = res_zpb()   // Global: Index in the sine curve table.
 
         *=$4000 "Code"
 
@@ -51,29 +64,76 @@ create_sprite:
         // Point sprite pointer for sprite 0 to start of screen RAM, so it'll show changing garbage.
         lda #$80                        // Sprite address / 16 => $2000/$40=$80
         sta sprite_0_pointer_addr
-        lda #40
-        sta sprite_0_xpos               // X position sprite #0
-        sta sprite_0_ypos               // Y position sprite #0
+        lda #$81
+        sta sprite_1_pointer_addr
+        lda #$82
+        sta sprite_2_pointer_addr
+        lda #$83
+        sta sprite_3_pointer_addr
+        lda #120
+        sta sprite_0_ypos
+        sta sprite_1_ypos
+        sta sprite_2_ypos
+        sta sprite_3_ypos
+        lda #24
+        sta sprite_0_xpos
+        lda #72
+        sta sprite_2_xpos
+        lda #120
+        sta sprite_3_xpos
+        lda #168
+        sta sprite_1_xpos
         lda #04
         sta sprite_0_color
-
-        // lda $D010                       // load X-MSB
-        // ora #%00000001                  // set extra bit for sprite #0
-        // sta $D010                       // write X-MSB register
+        lda #03
+        sta sprite_1_color
+        lda #01
+        sta sprite_2_color
+        sta sprite_3_color
+        lda #00                         // Initialize sine table index
+        sta zpb_sine_table_idx
 
         lda sprite_enable               // load X-MSB
-        ora #%00000001                  // set enable bit for sprite #0
+        ora #%00001111                  // set enable bit for sprites #0 and #1
         sta sprite_enable               // write X-MSB register
         sta sprite_double_x             // Set double-X mode
         sta sprite_double_y             // Set double-Y mode
 
-        
-flicker:
+mainloop:
+        inc zpb_delayctr                // Increment delaycounter. Intended to simply overflow back to 0.
+        lda zpb_delayctr
+        cmp #8
+        bne textcycle
+        // Stuff that should happen when timer reached target
+        lda #00                         // Reset delay timer.
+        sta zpb_delayctr
+        ldx sprite_0_xpos               // Move sprite along x.
+        inx
+        stx sprite_0_xpos
+        ldx sprite_1_xpos
+        inx
+        stx sprite_1_xpos
+        ldx sprite_2_xpos
+        inx
+        stx sprite_2_xpos
+        ldx sprite_3_xpos
+        inx
+        stx sprite_3_xpos
+        ldx zpb_sine_table_idx          // Set sprite Y to sinewave.
+        lda sinetable, x
+        sta sprite_0_ypos
+        sta sprite_1_ypos
+        sta sprite_2_ypos
+        sta sprite_3_ypos
+        inc zpb_sine_table_idx
+        //jsr cycle_color
+
+
 // wobble:
 //         lda $D012
 //         eor #7
 //         sta $D016
-        
+textcycle:
         lda #<txtmike
         sta zpw_textaddr
         lda #>txtmike
@@ -92,12 +152,12 @@ flicker:
         // Move cursor right by # chars printed.
         jsr advance_cursor
         // jsr update_coords
-        ldx #1
-        jsr wait
+        // ldx #1
+        // jsr wait
 
         jsr cycle_color
 
-        jmp flicker
+        jmp mainloop
 
 // Cycles colors through 1-16.
 cycle_color:
@@ -292,7 +352,7 @@ txtemptyblock:  // Can be printed five times to fill the entire screen.
         // 1 sprites generated with spritemate on 2/16/2025, 12:24:26 AM
         // Byte 64 of each sprite contains multicolor (high nibble) & color (low nibble) information
 
-        // sprite 0 / singlecolor / color: $04
+        // upside_down_heart / singlecolor / color: $04
         sprite_0:
         .byte $00,$00,$00,$00,$00,$00,$00,$08
         .byte $00,$00,$1c,$00,$00,$3e,$00,$00
@@ -302,3 +362,36 @@ txtemptyblock:  // Can be printed five times to fill the entire screen.
         .byte $ff,$fc,$1f,$ff,$fc,$0f,$f7,$f8
         .byte $07,$e3,$f0,$03,$c1,$e0,$00,$00
         .byte $00,$00,$00,$00,$00,$00,$00,$04
+        // skull / singlecolor / color: $01
+        sprite_1:
+        .byte $00,$00,$00,$01,$ff,$80,$02,$00
+        .byte $40,$04,$00,$20,$09,$c3,$90,$0b
+        .byte $e7,$d0,$13,$e7,$c8,$13,$e7,$c8
+        .byte $11,$c3,$88,$10,$18,$08,$10,$3c
+        .byte $08,$08,$3c,$10,$04,$18,$20,$02
+        .byte $00,$40,$02,$00,$40,$02,$a5,$40
+        .byte $02,$a5,$40,$03,$ff,$c0,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$01
+        // miker@montn / singlecolor / color: $01
+        sprite_2:
+        .byte $00,$00,$00,$22,$a5,$dc,$36,$a9
+        .byte $12,$2a,$b1,$92,$22,$b1,$1c,$22
+        .byte $a9,$14,$22,$a5,$d2,$00,$00,$00
+        .byte $00,$00,$03,$00,$00,$04,$00,$00
+        .byte $05,$00,$00,$05,$00,$00,$04,$00
+        .byte $00,$03,$00,$00,$00,$22,$8b,$a2
+        .byte $36,$c9,$32,$2a,$a9,$2a,$22,$a9
+        .byte $2a,$22,$99,$26,$22,$89,$22,$01
+        // ofone@bytes / singlecolor / color: $01
+        sprite_3:
+        .byte $00,$00,$00,$67,$32,$2e,$94,$4b
+        .byte $28,$96,$4a,$ac,$94,$4a,$a8,$94
+        .byte $4a,$68,$64,$32,$2e,$00,$00,$00
+        .byte $c0,$00,$00,$20,$00,$00,$a0,$00
+        .byte $00,$e0,$00,$00,$00,$00,$00,$c0
+        .byte $00,$00,$00,$00,$00,$e4,$5d,$ce
+        .byte $94,$49,$10,$e2,$89,$8c,$91,$09
+        .byte $02,$91,$09,$02,$e1,$09,$dc,$01
+        *=$3000 "Tables"
+sinetable:
+        .fill 256, 127.5 + 80.5*sin(toRadians(i*360/256))
