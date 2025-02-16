@@ -188,7 +188,11 @@ x_wobble:
         lda x_wobble_register
         and #%11111000                  // Clear last three bits.
         sta zpb_tempval
-        ldx zpb_sine_table_idx          // Set sprite Y to sinewave.
+        lda zpb_sine_table_idx          // Set sprite Y to sinewave.
+        clc
+        adc #96                        // min_val is aligned, so shift by a 3/4-cycle.
+                                        // Cycle length is 128, so add 96.
+        tax
         lda flatsine, X                 // Get offset value.
         ora zpb_tempval
         sta x_wobble_register
