@@ -1,8 +1,10 @@
-BasicUpstart2(main)
+BasicUpstart2(init)
 
 .const screen_base = $0400
 .const color_base = $D800
 .const border_color_addr = $D020
+.const x_wobble_register = $D016
+.const y_wobble_register = $D011
 
 .const sprite_0_pointer_addr = $07F8
 .const sprite_0_xpos = $D000
@@ -21,6 +23,7 @@ BasicUpstart2(main)
 .const sprite_3_ypos = $D007
 .const sprite_3_color = $D02A
 .const sprite_enable = $D015
+.const sprite_xpos_highbyte = $D010
 .const sprite_double_x = $D01D
 .const sprite_double_y = $D017
 .const sprite_center_y_pos = 120
@@ -49,16 +52,24 @@ BasicUpstart2(main)
                                         //        jump to subroutine.
 .const zpb_delayctr = res_zpb()         // Global: Delay counter that increases every main loop.
 .const zpb_sine_table_idx = res_zpb()   // Global: Index in the sine curve table.
+.const zpb_wobble_mode_counter = res_zpb()      // Global: Currently active wobble variant.
+.const zpb_wobble_mode = res_zpb()      // Global: Current wobble mode: 0 none, 1 x, 2 y, 3 x+y
 
         *=$4000 "Code"
 
-main:
+init:
         // Init color.
         lda #00
         sta border_color_addr           // Border to black.
         sta border_color_addr+1         // Background to black.
         lda #01                         // Don't use black for foreground.
         sta zpb_color
+        // Init counters.
+        lda #00
+        sta zpb_delayctr
+        sta zpb_sine_table_idx
+        sta zpb_wobble_mode_counter
+        sta zpb_wobble_mode
         jsr clearscreen
 create_sprite:
         // Point sprite pointer for sprite 0 to start of screen RAM, so it'll show changing garbage.
@@ -99,75 +110,150 @@ create_sprite:
         sta sprite_double_x             // Set double-X mode
         sta sprite_double_y             // Set double-Y mode
 
-mainloop:
+main_loop:
+        jsr textcycle
+
         inc zpb_delayctr                // Increment delaycounter. Intended to simply overflow back to 0.
         lda zpb_delayctr
         cmp #8
-        bne textcycle
+        bne main_loop
+delayed_main_loop:
         // Stuff that should happen when timer reached target
         lda #00                         // Reset delay timer.
         sta zpb_delayctr
+        inc zpb_wobble_mode_counter     // Tick wobble counter. On overflow go to next wobble mode.
+        bcc !+
+        inc zpb_wobble_mode
+        lda zpb_wobble_mode
+        cmp #04                         // Cycle through the four modes.
+        bne !+
+        lda #00                         // Loop around to 0.
+        sta zpb_wobble_mode
+!:
+        jsr spritebounce
+        jsr wobble
+        jmp main_loop
+
+
+spritebounce:
         ldx sprite_0_xpos               // Move sprite along x.
         inx
         stx sprite_0_xpos
+        bne !next_sprite_move+
+        lda sprite_xpos_highbyte
+        eor #%00000001
+        sta sprite_xpos_highbyte
+!next_sprite_move:
         ldx sprite_1_xpos
         inx
         stx sprite_1_xpos
+        bne !next_sprite_move+
+        lda sprite_xpos_highbyte
+        eor #%00000010
+        sta sprite_xpos_highbyte
+!next_sprite_move:
         ldx sprite_2_xpos
         inx
         stx sprite_2_xpos
+        bne !next_sprite_move+
+        lda sprite_xpos_highbyte
+        eor #%00000100
+        sta sprite_xpos_highbyte
+!next_sprite_move:
         ldx sprite_3_xpos
         inx
         stx sprite_3_xpos
-        ldx zpb_sine_table_idx          // Set sprite Y to sinewave.
+        bne !next_sprite_move+
+        lda sprite_xpos_highbyte
+        eor #%00001000
+        sta sprite_xpos_highbyte
+!next_sprite_move:
+        ldx zpb_sine_table_idx          // Set all sprite's Y to sinewave.
         lda sinetable, x
         sta sprite_0_ypos
         sta sprite_1_ypos
         sta sprite_2_ypos
         sta sprite_3_ypos
         inc zpb_sine_table_idx
-        //jsr cycle_color
+!end:
+        rts
 
+wobble:
+        // Wobble based on zpb_wobble_mode.
+x_wobble:
+        lda zpb_wobble_mode
+        and #%00000001                  // X wobble if least significant bit set.
+        cmp #%00000001
+        bne y_wobble                    // Skip to next mode.
+        lda x_wobble_register
+        and #%11111000                  // Clear last three bits.
+        sta zpb_tempval
+        ldx zpb_sine_table_idx          // Set sprite Y to sinewave.
+        lda flatsine, X                 // Get offset value.
+        ora zpb_tempval
+        sta x_wobble_register
+y_wobble:
+        lda zpb_wobble_mode
+        and #%00000010                  // Y wobble if 2nd least significant bit set.
+        cmp #%00000010
+        bne !end+                  // Skip to next mode.
+        lda y_wobble_register
+        and #%11111000                  // Clear last three bits.
+        sta zpb_tempval
+        ldx zpb_sine_table_idx          // Set sprite Y to sinewave.
+        lda flatsine, X                 // Get offset value.
+        ora zpb_tempval
+        sta y_wobble_register
+!end:
+        rts
 
-// wobble:
-//         lda $D012
-//         eor #7
-//         sta $D016
 textcycle:
-        lda #<txtmike
+        lda #<txtturbo
         sta zpw_textaddr
-        lda #>txtmike
+        lda #>txtturbo
         sta zpw_textaddr+1
         jsr printtext
         // Move cursor right by # chars printed.
         jsr advance_cursor
         //jsr update_coords
         //jsr down_one_line?
+        jsr cycle_color
 
-        lda #<txtmountain
+        lda #<txtwobbel
         sta zpw_textaddr
-        lda #>txtmountain
+        lda #>txtwobbel
         sta zpw_textaddr+1
         jsr printtext
         // Move cursor right by # chars printed.
         jsr advance_cursor
         // jsr update_coords
-        // ldx #1
-        // jsr wait
+        // jsr cycle_color
 
+        lda #<txt2k
+        sta zpw_textaddr
+        lda #>txt2k
+        sta zpw_textaddr+1
+        jsr printtext
+        // Move cursor right by # chars printed.
+        jsr advance_cursor
+        // jsr update_coords
         jsr cycle_color
 
-        jmp mainloop
+
+        // ldx #1
+        // jsr wait
+        rts
 
 // Cycles colors through 1-16.
 cycle_color:
         lda zpb_color
         sta border_color_addr           // Border to previous color.
         ldx #01
-        ldy #15
+        ldy #16
         jsr add_and_clamp
         sta zpb_color
-        bne !+                          // If zero (black), increment.
+        bne !+                          // If zero (black), skip over black and white.
+        inc zpb_color
         inc zpb_color
 !:
         rts
@@ -347,6 +433,15 @@ txtmountain:
 txtemptyblock:  // Can be printed five times to fill the entire screen.
         .fill 200, ' '
         .byte 0
+txtturbo:
+        .text "turbo"
+        .byte 0
+txtwobbel:
+        .text "wobbel"
+        .byte 0
+txt2k:
+        .text "2k"
+        .byte 0
 
         *=$2000 "Sprites"
         // 1 sprites generated with spritemate on 2/16/2025, 12:24:26 AM
@@ -395,3 +490,5 @@ txtemptyblock:  // Can be printed five times to fill the entire screen.
         *=$3000 "Tables"
 sinetable:
         .fill 256, 127.5 + 80.5*sin(toRadians(i*360/256))
+flatsine:
+        .fill 256, 3.5 + 3.5*sin(toRadians(180 + i*720/256))
