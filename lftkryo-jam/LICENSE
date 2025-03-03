@@ -1,0 +1,8 @@
+I am not the original author of this code and am replicating it here with permission. I do not know what license, if any, this code is under. I **assume** it's OK to download and locally modify the code as you like, but please contact the original author before publishing your works - see below.
+
+The vast majority of the code was written by Linus Åkesson / lft and published as part of a YouTube video. See https://www.linusakesson.net/programming/music-from-scratch/index.php for more details.
+I got his express permission to publish the code via email ("Feel free to post the code anywhere you like."), but since no license was explicitly specified, I cannot do so here either.
+
+lemon64.com forum user vma transcribed the code from the video with minor changes and minor errors, which I corrected by watching the original video.
+
+The changes I made to skip the initialization on subsequent runs are minor and I'm happy for you to do with those whatever you wish.
