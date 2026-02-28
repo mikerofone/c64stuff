@@ -1,0 +1,13 @@
+{
+    "name": "die_diskette_invitation_2026",
+    "description": "Project die_diskette_invitation_2026",
+    "toolkit": "kick",
+    "sources": [
+        "src/main.asm"
+    ],
+    "build": "debug",
+    "definitions": [],
+    "includes": [],
+    "args": [],
+    "compiler": ""
+}

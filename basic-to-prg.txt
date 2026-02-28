@@ -1,0 +1,5 @@
+# user your $EDITOR/ide of choice saving program.bas
+petcat -w -o program.prg -- program.bas
+petcat -w -o README.seq -- readme.txt
+c1541 -format program,st d64 program.d64 -write program.prg MYPROG.BAS -write README.seq README,s -dir
+
