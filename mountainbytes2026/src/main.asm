@@ -48,9 +48,12 @@ BasicUpstart2(init)
 
 .const zpb_tempval = res_zpb()          // Local: Temporary byte that might get clobbered by any
                                         //        jump to subroutine.
+.const zpw_tempword = res_zpw()          // Local: Temporary word that might get clobbered by any
+                                        //        jump to subroutine.
 
 // Sprite flags
 .const zpb_num_sprites = res_zpb()      // Global: Number of sprites to use
+.const zpb_current_text_index = res_zpw()  // Global: Index into list_of_scrollers to select which text to display
 .const zpb_next_char_index = res_zpb()  // Global: Next character from the string to use in the snek
 
 // Main animation counters.
@@ -71,7 +74,9 @@ init:
         lda #00
         sta zpb_delayctr
         sta zpb_sine_table_idx
+        sta zpb_current_text_index
         sta zpb_next_char_index
+        lda <list_of_scrollers
         jsr clearscreen
 create_sprites:
         // Load sprite data from consecutive 64-bytes segments starting at $2040
@@ -213,7 +218,6 @@ set_sprite_to_char:
         rts
 
 spritebounce:
-
         ldx #0
 !step:
         cpx #num_sprites
@@ -230,7 +234,6 @@ spritebounce:
 // Clobbers A,Y.
 //      Internal: Y double step index
 sprite_step:
-        // TODO: Make letters snake instead of move vertically as a unit
         txa
         tay
         lda zpb_sine_table_idx
@@ -268,6 +271,10 @@ sprite_step:
         lda #140
         sta sprite_base_pos,Y
         // Character respawns - update to next char from text
+        // ldy zpb_current_text_index
+        // lda list_of_scrollers,Y
+        // ldy zpb_next_char_index
+        // lda (list_of_scrollers,Y)
         ldy zpb_next_char_index
         lda txtscroller1,Y
         cmp #0
@@ -1233,3 +1240,8 @@ sprites_bitmasks: // For easier accessing of single-sprit bits, double-indexed
         .byte %01000000
         .byte %10000000
         .byte %10000000
+list_of_scrollers:
+        .word txtscroller1
+        .word txtscroller2
+        .word txtscroller3
+        .byte 0
