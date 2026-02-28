@@ -12,25 +12,12 @@ BasicUpstart2(init)
 .const sprite_base_color = $D027
 
 // Consts for sprite rendering
-.const sprite_sprite_x_spacing = 55
+.const sprite_x_spacing = 50
+.const sprite_y_sine_distance = 8
 .const num_sprites = 8
+// Text-to-sprite constants
+.const first_ascii_code = 32
 
-// .const sprite_0_pointer_addr = $07F8
-.const sprite_0_xpos = $D000
-.const sprite_0_ypos = $D001
-// .const sprite_0_color = $D027
-// .const sprite_1_pointer_addr = $07F9
-.const sprite_1_xpos = $D002
-.const sprite_1_ypos = $D003
-// .const sprite_1_color = $D028
-// .const sprite_2_pointer_addr = $07FA
-.const sprite_2_xpos = $D004
-.const sprite_2_ypos = $D005
-// .const sprite_2_color = $D029
-// .const sprite_3_pointer_addr = $07FB
-.const sprite_3_xpos = $D006
-.const sprite_3_ypos = $D007
-// .const sprite_3_color = $D02A
 .const sprite_enable = $D015
 .const sprite_xpos_highbyte = $D010
 .const sprite_double_x = $D01D
@@ -64,12 +51,11 @@ BasicUpstart2(init)
 
 // Sprite flags
 .const zpb_num_sprites = res_zpb()      // Global: Number of sprites to use
+.const zpb_next_char_index = res_zpb()  // Global: Next character from the string to use in the snek
 
 // Main animation counters.
 .const zpb_delayctr = res_zpb()         // Global: Delay counter that increases every main loop.
 .const zpb_sine_table_idx = res_zpb()   // Global: Index in the sine curve table.
-.const zpb_wobble_mode_counter = res_zpb()      // Global: Currently active wobble variant.
-.const zpb_wobble_mode = res_zpb()      // Global: Current wobble mode: 0 none, 1 x, 2 y, 3 x+y
 
         *=$4000 "Code"
 
@@ -85,14 +71,13 @@ init:
         lda #00
         sta zpb_delayctr
         sta zpb_sine_table_idx
-        sta zpb_wobble_mode_counter
-        sta zpb_wobble_mode
+        sta zpb_next_char_index
         jsr clearscreen
 create_sprites:
         // Load sprite data from consecutive 64-bytes segments starting at $2040
         // Enable zpb_num_sprites sprites by cycling through them one by one
         // X: index of sprite
-        // TODO First init all the single-step addresses, then do it again with 2-step for the positions
+        // TODO First init all the double-step addresses, then do it again with single-step for enabling etc
         // Word on stack: xpos of sprite (accumulated over loop)
         lda #num_sprites                          // Number of sprites to enable
         sta zpb_num_sprites
@@ -105,8 +90,8 @@ create_sprite:
         cpx zpb_num_sprites                          // Check if we've reached last index
         beq !done+
 
-        txa                             // Compute base pointer address as $81+X
-        adc #$81                        // Sprite base address / 64 => $2040/$40=$81
+        // Initially, all sprites point to the first character (space = empty)
+        lda #$81                        // Sprite base address / 64 => $2040/$40=$81
         sta sprite_base_pointer_addr,X
 
         // The x/y registers are sequential, so steps of 2 are needed. Multiply X by 2.
@@ -116,7 +101,7 @@ create_sprite:
         // Load X position from stack
         pla
         clc                             // Clear carry
-        adc #sprite_sprite_x_spacing    // If carry, increment hi byte on stack
+        adc #sprite_x_spacing    // If carry, increment hi byte on stack
         sta sprite_base_pos,X
         pla                             // Pull hi byte (does not change carry)
         adc #0                             // Add carry to hi byte before writing
@@ -186,99 +171,117 @@ once_pre_loop:
         lda #1
         sta zpb_color
         //jsr textcycle
+        // ldx #0
+        // lda #72
+        // jsr set_sprite_to_char
+
+        // ldx #1
+        // lda #42
+        // jsr set_sprite_to_char
+
+        // ldx #2
+        // lda #82
+        // jsr set_sprite_to_char
 main_loop:
         //TODO do stuff
         ldx #1
         jsr wait
         inc zpb_delayctr                // Increment delaycounter. Intended to simply overflow back to 0.
         lda zpb_delayctr
-        cmp #8
+        cmp #2
         bne main_loop
 delayed_main_loop:
         // Stuff that should happen when timer reached target
         lda #00                         // Reset delay timer.
         sta zpb_delayctr
-        // inc zpb_wobble_mode_counter     // Tick wobble counter. On overflow go to next wobble mode.
-        // bne !+
-        // inc zpb_wobble_mode
-        // lda zpb_wobble_mode
-        // cmp #04                         // Cycle through the four modes.
-        // bne !+
-        // lda #00                         // Loop around to 0.
-        // sta zpb_wobble_mode
 !:
-        //jsr spritebounce
-        // jsr wobble
+        jsr spritebounce
         jmp main_loop
 
 
-spritebounce:
-        ldx sprite_0_xpos               // Move sprite along x.
-        bne !regular_decrement+         // If xpos == 0, then twiddle hibyte and set lobyte to respective max value.
-        lda sprite_xpos_highbyte
-        eor #%00000001
-        sta sprite_xpos_highbyte
-        and #%00000001                  // Mask all other bits to check for zero
-        beq !regular_decrement+         // If hibite zero, then regular decrement sets xpos to 255.
-                                        // Otherwise set xpos to (effectively) 320.
-        ldx #65
-        stx sprite_0_xpos
-        jmp !next_sprite_move+
-!regular_decrement:
-        dex
-        stx sprite_0_xpos
-!next_sprite_move:
-        ldx sprite_1_xpos               // Move sprite along x.
-        bne !regular_decrement+         // If xpos == 0, then twiddle hibyte and set lobyte to respective max value.
-        lda sprite_xpos_highbyte
-        eor #%00000010
-        sta sprite_xpos_highbyte
-        and #%00000001                  // Mask all other bits to check for zero
-        beq !regular_decrement+         // If hibite zero, then regular decrement sets xpos to 255.
-                                        // Otherwise set xpos to (effectively) 320.
-        ldx #65
-        stx sprite_1_xpos
-        jmp !next_sprite_move+
-!regular_decrement:
-        dex
-        stx sprite_1_xpos
-!next_sprite_move:
-
-        // TODO: Make letters snake instead of move vertically as a unit
-        ldx zpb_sine_table_idx          // Set all sprite's Y to sinewave.
-        lda sinetable, x
-        sta sprite_0_ypos
-        sta sprite_1_ypos
-        sta sprite_2_ypos
-        sta sprite_3_ypos
-        inc zpb_sine_table_idx
-!end:
+// Set sprite with index X to ASCII value in A (range 32-95).
+// X: The sprite to update.
+// A: The ASCII value to show.
+set_sprite_to_char:
+        // ASCII bitmaps start in RAM at .ascii32, and are 64bytes in size.
+        // The VIC register values contain RAM addresses divided by 64, so single-digit increments suffice.
+        sec
+        sbc #first_ascii_code           // Chop off the first ASCII codes that are not in the table
+        clc
+        adc #$81                        // Add the address of the first ascii bitmap
+        sta sprite_base_pointer_addr,X
         rts
 
-// wobble:
-//         // Wobble based on zpb_wobble_mode.
-// x_wobble:
-//         lda x_wobble_register
-//         and #%11111000                  // Clear last three bits.
-//         sta zpb_tempval
-//         lda zpb_sine_table_idx          // Set sprite Y to sinewave.
-//         clc
-//         adc #96                        // min_val is aligned, so shift by a 3/4-cycle.
-//                                         // Cycle length is 128, so add 96.
-//         tax
-//         lda flatsine, X                 // Get offset value.
-//         ora zpb_tempval
-//         sta x_wobble_register
-// y_wobble:
-//         lda y_wobble_register
-//         and #%11111000                  // Clear last three bits.
-//         sta zpb_tempval
-//         ldx zpb_sine_table_idx          // Set sprite Y to sinewave.
-//         lda flatsine, X                 // Get offset value.
-//         ora zpb_tempval
-//         sta y_wobble_register
-// !end:
-//         rts
+spritebounce:
+
+        ldx #0
+!step:
+        cpx #num_sprites
+        beq !end+
+        jsr sprite_step
+        inx
+        jmp !step-
+!end:
+        inc zpb_sine_table_idx          // Shift Y by one
+        rts
+
+// Move a sprite by one step.
+// X: The sprite index to move.
+// Clobbers A,Y.
+//      Internal: Y double step index
+sprite_step:
+        // TODO: Make letters snake instead of move vertically as a unit
+        txa
+        tay
+        lda zpb_sine_table_idx
+!shift_loop:
+        cpy #0
+        beq !y_idx_found+
+        clc
+        adc sprite_y_sine_distance
+        dey
+        jmp !shift_loop-
+!y_idx_found:
+        tay
+        lda sinetable, Y
+        sta zpb_tempval                 // Store sine value in temp var
+        // Double index to reach base position memory.
+        txa
+        asl
+        tay
+        iny                             // Updating Y position is +1 from X
+        lda zpb_tempval
+        sta sprite_base_pos,Y           // Store new value in Y register
+        dey                             // Go back to X
+        lda sprite_base_pos,Y           // Get current X address
+        sec                             // Set borrow
+        sbc #1                          // Will CLEAR carry if underflow
+        sta sprite_base_pos,Y
+        bcs !end+
+        // If underflow, then invert hibyte and set lobyte to respective max value for middle or right of screen.
+        lda sprite_xpos_highbyte
+        eor sprites_bitmasks,Y
+        sta sprite_xpos_highbyte
+        and sprites_bitmasks,Y          // Mask all other bits to check for zero
+        beq !end+                       // If hibite is now zero, then regular decrement already set xpos to 255.
+                                        // Otherwise set xpos to be just offscreen.
+        lda #140
+        sta sprite_base_pos,Y
+        // Character respawns - update to next char from text
+        ldy zpb_next_char_index
+        lda txtscroller1,Y
+        cmp #0
+        bne !print+
+        // End of string, loop back
+        ldy #0;
+        sty zpb_next_char_index
+        lda txtscroller1,Y
+!print:
+        jsr set_sprite_to_char
+        inc zpb_next_char_index
+
+!end:
+        rts
 
 textcycle:
         lda #<txtwebsite
@@ -291,27 +294,6 @@ textcycle:
         //jsr update_coords
         //jsr down_one_line?
         //jsr cycle_color
-
-        // //lda #<txtwobbel
-        // sta zpw_textaddr
-        // //lda #>txtwobbel
-        // sta zpw_textaddr+1
-        // jsr printtext
-        // // Move cursor right by # chars printed.
-        // jsr advance_cursor
-        // // jsr update_coords
-        // // jsr cycle_color
-
-        // //lda #<txt2k
-        // sta zpw_textaddr
-        // //lda #>txt2k
-        // sta zpw_textaddr+1
-        // jsr printtext
-        // // Move cursor right by # chars printed.
-        // jsr advance_cursor
-        // // jsr update_coords
-        // jsr cycle_color
-
 
         ldx #1
         jsr wait
@@ -496,294 +478,713 @@ endstring:
         rts                     // Done, return.
 
         *=$2040 "Sprites"
-        // 26 sprites generated with spritemate on 2/28/2026, 2:20:48 AM
+
+        // 64 sprites generated with spritemate on 2/28/2026, 9:10:43 PM
         // Byte 64 of each sprite contains multicolor (high nibble) & color (low nibble) information
 
         // sprite 1 / singlecolor / color: $01
-        sprite_data_a:
-        .byte $00,$00,$00,$00,$18,$00,$00,$18
-        .byte $00,$00,$7e,$00,$00,$7e,$00,$01
-        .byte $e7,$80,$01,$e7,$80,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$81,$e0,$07,$81
-        .byte $e0,$07,$ff,$e0,$07,$ff,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$81,$e0,$07,$81
-        .byte $e0,$07,$81,$e0,$07,$81,$e0,$01
+        ascii32:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$01
 
         // sprite 2 / singlecolor / color: $01
-        sprite_data_b:
-        .byte $00,$00,$00,$07,$ff,$80,$07,$ff
-        .byte $80,$01,$e1,$e0,$01,$e1,$e0,$01
-        .byte $e1,$e0,$01,$e1,$e0,$01,$e1,$e0
-        .byte $01,$e1,$e0,$01,$ff,$80,$01,$ff
-        .byte $80,$01,$e1,$e0,$01,$e1,$e0,$01
-        .byte $e1,$e0,$01,$e1,$e0,$01,$e1,$e0
-        .byte $01,$e1,$e0,$01,$e1,$e0,$01,$e1
-        .byte $e0,$07,$ff,$80,$07,$ff,$80,$01
+        ascii33:
+        .byte $00,$00,$00,$00,$78,$00,$00,$78
+        .byte $00,$01,$fe,$00,$01,$fe,$00,$01
+        .byte $fe,$00,$01,$fe,$00,$01,$fe,$00
+        .byte $01,$fe,$00,$00,$78,$00,$00,$78
+        .byte $00,$00,$78,$00,$00,$78,$00,$00
+        .byte $78,$00,$00,$78,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$78,$00,$00,$78
+        .byte $00,$00,$78,$00,$00,$78,$00,$01
 
         // sprite 3 / singlecolor / color: $01
-        sprite_data_c:
-        .byte $00,$00,$00,$00,$7f,$80,$00,$7f
-        .byte $80,$01,$e1,$e0,$01,$e1,$e0,$07
-        .byte $80,$60,$07,$80,$60,$07,$80,$00
-        .byte $07,$80,$00,$07,$80,$00,$07,$80
-        .byte $00,$07,$80,$00,$07,$80,$00,$07
-        .byte $80,$00,$07,$80,$00,$07,$80,$60
-        .byte $07,$80,$60,$01,$e1,$e0,$01,$e1
-        .byte $e0,$00,$7f,$80,$00,$7f,$80,$01
+        ascii34:
+        .byte $07,$87,$80,$07,$87,$80,$07,$87
+        .byte $80,$07,$87,$80,$07,$87,$80,$01
+        .byte $86,$00,$01,$86,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$01
 
         // sprite 4 / singlecolor / color: $01
-        sprite_data_d:
-        .byte $00,$00,$00,$07,$fe,$00,$07,$fe
-        .byte $00,$01,$e7,$80,$01,$e7,$80,$01
-        .byte $e1,$e0,$01,$e1,$e0,$01,$e1,$e0
-        .byte $01,$e1,$e0,$01,$e1,$e0,$01,$e1
-        .byte $e0,$01,$e1,$e0,$01,$e1,$e0,$01
-        .byte $e1,$e0,$01,$e1,$e0,$01,$e1,$e0
-        .byte $01,$e1,$e0,$01,$e7,$80,$01,$e7
-        .byte $80,$07,$fe,$00,$07,$fe,$00,$01
+        ascii35:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$07,$9e,$00,$07,$9e,$00,$07
+        .byte $9e,$00,$07,$9e,$00,$1f,$ff,$80
+        .byte $1f,$ff,$80,$07,$9e,$00,$07,$9e
+        .byte $00,$07,$9e,$00,$07,$9e,$00,$07
+        .byte $9e,$00,$07,$9e,$00,$1f,$ff,$80
+        .byte $1f,$ff,$80,$07,$9e,$00,$07,$9e
+        .byte $00,$07,$9e,$00,$07,$9e,$00,$01
 
         // sprite 5 / singlecolor / color: $01
-        sprite_data_e:
-        .byte $00,$00,$00,$07,$ff,$e0,$07,$ff
-        .byte $e0,$01,$e1,$e0,$01,$e1,$e0,$01
-        .byte $e0,$60,$01,$e0,$60,$01,$e6,$00
-        .byte $01,$e6,$00,$01,$fe,$00,$01,$fe
-        .byte $00,$01,$e6,$00,$01,$e6,$00,$01
-        .byte $e0,$00,$01,$e0,$00,$01,$e0,$60
-        .byte $01,$e0,$60,$01,$e1,$e0,$01,$e1
-        .byte $e0,$07,$ff,$e0,$07,$ff,$e0,$01
+        ascii36:
+        .byte $00,$78,$00,$07,$fe,$00,$07,$fe
+        .byte $00,$1e,$07,$80,$1e,$07,$80,$1e
+        .byte $01,$80,$1e,$01,$80,$1e,$00,$00
+        .byte $1e,$00,$00,$07,$fe,$00,$07,$fe
+        .byte $00,$00,$07,$80,$00,$07,$80,$00
+        .byte $07,$80,$00,$07,$80,$18,$07,$80
+        .byte $18,$07,$80,$1e,$07,$80,$1e,$07
+        .byte $80,$07,$fe,$00,$07,$fe,$00,$01
 
         // sprite 6 / singlecolor / color: $01
-        sprite_data_f:
-        .byte $00,$00,$00,$07,$ff,$e0,$07,$ff
-        .byte $e0,$01,$e1,$e0,$01,$e1,$e0,$01
-        .byte $e0,$60,$01,$e0,$60,$01,$e6,$00
-        .byte $01,$e6,$00,$01,$fe,$00,$01,$fe
-        .byte $00,$01,$e6,$00,$01,$e6,$00,$01
-        .byte $e0,$00,$01,$e0,$00,$01,$e0,$00
-        .byte $01,$e0,$00,$01,$e0,$00,$01,$e0
-        .byte $00,$07,$f8,$00,$07,$f8,$00,$01
+        ascii37:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$1e
+        .byte $01,$80,$1e,$01,$80,$1e,$07,$80
+        .byte $1e,$07,$80,$00,$1e,$00,$00,$1e
+        .byte $00,$00,$78,$00,$00,$78,$00,$01
+        .byte $e0,$00,$01,$e0,$00,$07,$80,$00
+        .byte $07,$80,$00,$1e,$07,$80,$1e,$07
+        .byte $80,$18,$07,$80,$18,$07,$80,$01
 
         // sprite 7 / singlecolor / color: $01
-        sprite_data_g:
-        .byte $00,$00,$00,$00,$7f,$80,$00,$7f
-        .byte $80,$01,$e1,$e0,$01,$e1,$e0,$07
-        .byte $80,$60,$07,$80,$60,$07,$80,$00
-        .byte $07,$80,$00,$07,$80,$00,$07,$80
-        .byte $00,$07,$9f,$e0,$07,$9f,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$01,$e1,$e0,$01,$e1
-        .byte $e0,$00,$7e,$60,$00,$7e,$60,$01
+        ascii38:
+        .byte $00,$00,$00,$01,$f8,$00,$01,$f8
+        .byte $00,$07,$9e,$00,$07,$9e,$00,$07
+        .byte $9e,$00,$07,$9e,$00,$01,$f8,$00
+        .byte $01,$f8,$00,$07,$e7,$80,$07,$e7
+        .byte $80,$1e,$7e,$00,$1e,$7e,$00,$1e
+        .byte $1e,$00,$1e,$1e,$00,$1e,$1e,$00
+        .byte $1e,$1e,$00,$1e,$1e,$00,$1e,$1e
+        .byte $00,$07,$e7,$80,$07,$e7,$80,$01
 
         // sprite 8 / singlecolor / color: $01
-        sprite_data_h:
-        .byte $00,$00,$00,$07,$81,$e0,$07,$81
-        .byte $e0,$07,$81,$e0,$07,$81,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$ff,$e0,$07,$ff
-        .byte $e0,$07,$81,$e0,$07,$81,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$81,$e0,$07,$81
-        .byte $e0,$07,$81,$e0,$07,$81,$e0,$01
+        ascii39:
+        .byte $01,$e0,$00,$01,$e0,$00,$01,$e0
+        .byte $00,$01,$e0,$00,$01,$e0,$00,$07
+        .byte $80,$00,$07,$80,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$01
 
         // sprite 9 / singlecolor / color: $01
-        sprite_data_i:
-        .byte $00,$00,$00,$00,$7f,$80,$00,$7f
-        .byte $80,$00,$1e,$00,$00,$1e,$00,$00
-        .byte $1e,$00,$00,$1e,$00,$00,$1e,$00
-        .byte $00,$1e,$00,$00,$1e,$00,$00,$1e
-        .byte $00,$00,$1e,$00,$00,$1e,$00,$00
-        .byte $1e,$00,$00,$1e,$00,$00,$1e,$00
-        .byte $00,$1e,$00,$00,$1e,$00,$00,$1e
-        .byte $00,$00,$7f,$80,$00,$7f,$80,$01
+        ascii40:
+        .byte $00,$00,$00,$00,$1e,$00,$00,$1e
+        .byte $00,$00,$78,$00,$00,$78,$00,$01
+        .byte $e0,$00,$01,$e0,$00,$01,$e0,$00
+        .byte $01,$e0,$00,$01,$e0,$00,$01,$e0
+        .byte $00,$01,$e0,$00,$01,$e0,$00,$01
+        .byte $e0,$00,$01,$e0,$00,$01,$e0,$00
+        .byte $01,$e0,$00,$00,$78,$00,$00,$78
+        .byte $00,$00,$1e,$00,$00,$1e,$00,$01
 
         // sprite 10 / singlecolor / color: $01
-        sprite_data_j:
-        .byte $00,$00,$00,$00,$1f,$e0,$00,$1f
-        .byte $e0,$00,$07,$80,$00,$07,$80,$00
-        .byte $07,$80,$00,$07,$80,$00,$07,$80
-        .byte $00,$07,$80,$00,$07,$80,$00,$07
-        .byte $80,$00,$07,$80,$00,$07,$80,$07
-        .byte $87,$80,$07,$87,$80,$07,$87,$80
-        .byte $07,$87,$80,$07,$87,$80,$07,$87
-        .byte $80,$01,$fe,$00,$01,$fe,$00,$01
-
-        // sprite 11 / singlecolor / color: $01
-        sprite_data_k:
-        .byte $00,$00,$00,$07,$e1,$e0,$07,$e1
-        .byte $e0,$01,$e1,$e0,$01,$e1,$e0,$01
-        .byte $e1,$e0,$01,$e1,$e0,$01,$e7,$80
-        .byte $01,$e7,$80,$01,$fe,$00,$01,$fe
-        .byte $00,$01,$fe,$00,$01,$fe,$00,$01
-        .byte $e7,$80,$01,$e7,$80,$01,$e1,$e0
-        .byte $01,$e1,$e0,$01,$e1,$e0,$01,$e1
-        .byte $e0,$07,$e1,$e0,$07,$e1,$e0,$01
-
-        // sprite 12 / singlecolor / color: $01
-        sprite_data_l:
-        .byte $00,$00,$00,$07,$f8,$00,$07,$f8
-        .byte $00,$01,$e0,$00,$01,$e0,$00,$01
-        .byte $e0,$00,$01,$e0,$00,$01,$e0,$00
-        .byte $01,$e0,$00,$01,$e0,$00,$01,$e0
-        .byte $00,$01,$e0,$00,$01,$e0,$00,$01
-        .byte $e0,$00,$01,$e0,$00,$01,$e0,$60
-        .byte $01,$e0,$60,$01,$e1,$e0,$01,$e1
-        .byte $e0,$07,$ff,$e0,$07,$ff,$e0,$01
-
-        // sprite 13 / singlecolor / color: $01
-        sprite_data_m:
-        .byte $00,$00,$00,$07,$80,$78,$07,$80
-        .byte $78,$07,$e1,$f8,$07,$e1,$f8,$07
-        .byte $ff,$f8,$07,$ff,$f8,$07,$ff,$f8
-        .byte $07,$ff,$f8,$07,$9e,$78,$07,$9e
-        .byte $78,$07,$80,$78,$07,$80,$78,$07
-        .byte $80,$78,$07,$80,$78,$07,$80,$78
-        .byte $07,$80,$78,$07,$80,$78,$07,$80
-        .byte $78,$07,$80,$78,$07,$80,$78,$01
-
-        // sprite 14 / singlecolor / color: $01
-        sprite_data_n:
-        .byte $00,$00,$00,$07,$81,$e0,$07,$81
-        .byte $e0,$07,$e1,$e0,$07,$e1,$e0,$07
-        .byte $f9,$e0,$07,$f9,$e0,$07,$ff,$e0
-        .byte $07,$ff,$e0,$07,$9f,$e0,$07,$9f
-        .byte $e0,$07,$87,$e0,$07,$87,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$81,$e0,$07,$81
-        .byte $e0,$07,$81,$e0,$07,$81,$e0,$01
-
-        // sprite 15 / singlecolor / color: $01
-        sprite_data_o:
-        .byte $00,$00,$00,$01,$ff,$80,$01,$ff
-        .byte $80,$07,$81,$e0,$07,$81,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$81,$e0,$07,$81
-        .byte $e0,$07,$81,$e0,$07,$81,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$81,$e0,$07,$81
-        .byte $e0,$01,$ff,$80,$01,$ff,$80,$01
-
-        // sprite 16 / singlecolor / color: $01
-        sprite_data_p:
-        .byte $00,$00,$00,$07,$ff,$80,$07,$ff
-        .byte $80,$01,$e1,$e0,$01,$e1,$e0,$01
-        .byte $e1,$e0,$01,$e1,$e0,$01,$e1,$e0
-        .byte $01,$e1,$e0,$01,$ff,$80,$01,$ff
-        .byte $80,$01,$e0,$00,$01,$e0,$00,$01
-        .byte $e0,$00,$01,$e0,$00,$01,$e0,$00
-        .byte $01,$e0,$00,$01,$e0,$00,$01,$e0
-        .byte $00,$07,$f8,$00,$07,$f8,$00,$01
-
-        // sprite 17 / singlecolor / color: $01
-        sprite_data_q:
-        .byte $00,$00,$00,$01,$ff,$80,$01,$ff
-        .byte $80,$07,$81,$e0,$07,$81,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$81,$e0,$07,$81
-        .byte $e0,$07,$99,$e0,$07,$99,$e0,$07
-        .byte $9f,$e0,$07,$9f,$e0,$01,$ff,$80
-        .byte $01,$ff,$80,$00,$07,$80,$00,$07
-        .byte $80,$00,$07,$e0,$00,$07,$e0,$01
-
-        // sprite 18 / singlecolor / color: $01
-        sprite_data_r:
-        .byte $00,$00,$00,$07,$ff,$80,$07,$ff
-        .byte $80,$01,$e1,$e0,$01,$e1,$e0,$01
-        .byte $e1,$e0,$01,$e1,$e0,$01,$e1,$e0
-        .byte $01,$e1,$e0,$01,$ff,$80,$01,$ff
-        .byte $80,$01,$e7,$80,$01,$e7,$80,$01
-        .byte $e1,$e0,$01,$e1,$e0,$01,$e1,$e0
-        .byte $01,$e1,$e0,$01,$e1,$e0,$01,$e1
-        .byte $e0,$07,$e1,$e0,$07,$e1,$e0,$01
-
-        // sprite 19 / singlecolor / color: $01
-        sprite_data_s:
-        .byte $00,$00,$00,$01,$ff,$80,$01,$ff
-        .byte $80,$07,$81,$e0,$07,$81,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$01,$e0,$00
-        .byte $01,$e0,$00,$00,$7e,$00,$00,$7e
-        .byte $00,$00,$07,$80,$00,$07,$80,$00
-        .byte $01,$e0,$00,$01,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$81,$e0,$07,$81
-        .byte $e0,$01,$ff,$80,$01,$ff,$80,$01
-
-        // sprite 20 / singlecolor / color: $01
-        sprite_data_t:
-        .byte $00,$00,$00,$07,$ff,$f8,$07,$ff
-        .byte $f8,$07,$9e,$78,$07,$9e,$78,$06
-        .byte $1e,$18,$06,$1e,$18,$00,$1e,$00
+        ascii41:
+        .byte $00,$00,$00,$01,$e0,$00,$01,$e0
+        .byte $00,$00,$78,$00,$00,$78,$00,$00
+        .byte $1e,$00,$00,$1e,$00,$00,$1e,$00
         .byte $00,$1e,$00,$00,$1e,$00,$00,$1e
         .byte $00,$00,$1e,$00,$00,$1e,$00,$00
+        .byte $1e,$00,$00,$1e,$00,$00,$1e,$00
+        .byte $00,$1e,$00,$00,$78,$00,$00,$78
+        .byte $00,$01,$e0,$00,$01,$e0,$00,$01
+
+        // sprite 11 / singlecolor / color: $01
+        ascii42:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$07,$87,$80
+        .byte $07,$87,$80,$01,$fe,$00,$01,$fe
+        .byte $00,$1f,$ff,$e0,$1f,$ff,$e0,$01
+        .byte $fe,$00,$01,$fe,$00,$07,$87,$80
+        .byte $07,$87,$80,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$01
+
+        // sprite 12 / singlecolor / color: $01
+        ascii43:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$78,$00,$00,$78
+        .byte $00,$07,$ff,$80,$07,$ff,$80,$00
+        .byte $78,$00,$00,$78,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$01
+
+        // sprite 13 / singlecolor / color: $01
+        ascii44:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $78,$00,$00,$78,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$78,$00,$00,$78
+        .byte $00,$01,$e0,$00,$01,$e0,$00,$01
+
+        // sprite 14 / singlecolor / color: $01
+        ascii45:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$1f,$ff,$80,$1f,$ff,$80,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$01
+
+        // sprite 15 / singlecolor / color: $01
+        ascii46:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$78,$00,$00,$78
+        .byte $00,$00,$78,$00,$00,$78,$00,$01
+
+        // sprite 16 / singlecolor / color: $01
+        ascii47:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $01,$80,$00,$01,$80,$00,$07,$80
+        .byte $00,$07,$80,$00,$1e,$00,$00,$1e
+        .byte $00,$00,$78,$00,$00,$78,$00,$01
+        .byte $e0,$00,$01,$e0,$00,$07,$80,$00
+        .byte $07,$80,$00,$1e,$00,$00,$1e,$00
+        .byte $00,$18,$00,$00,$18,$00,$00,$01
+
+        // sprite 17 / singlecolor / color: $01
+        ascii48:
+        .byte $00,$00,$00,$01,$fe,$00,$01,$fe
+        .byte $00,$07,$87,$80,$07,$87,$80,$1e
+        .byte $01,$e0,$1e,$01,$e0,$1e,$01,$e0
+        .byte $1e,$01,$e0,$1e,$79,$e0,$1e,$79
+        .byte $e0,$1e,$79,$e0,$1e,$79,$e0,$1e
+        .byte $01,$e0,$1e,$01,$e0,$1e,$01,$e0
+        .byte $1e,$01,$e0,$07,$87,$80,$07,$87
+        .byte $80,$01,$fe,$00,$01,$fe,$00,$01
+
+        // sprite 18 / singlecolor / color: $01
+        ascii49:
+        .byte $00,$00,$00,$00,$78,$00,$00,$78
+        .byte $00,$01,$f8,$00,$01,$f8,$00,$07
+        .byte $f8,$00,$07,$f8,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$78,$00,$00,$78
+        .byte $00,$00,$78,$00,$00,$78,$00,$00
+        .byte $78,$00,$00,$78,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$78,$00,$00,$78
+        .byte $00,$07,$ff,$80,$07,$ff,$80,$01
+
+        // sprite 19 / singlecolor / color: $01
+        ascii50:
+        .byte $00,$00,$00,$07,$fe,$00,$07,$fe
+        .byte $00,$1e,$07,$80,$1e,$07,$80,$00
+        .byte $07,$80,$00,$07,$80,$00,$1e,$00
+        .byte $00,$1e,$00,$00,$78,$00,$00,$78
+        .byte $00,$01,$e0,$00,$01,$e0,$00,$07
+        .byte $80,$00,$07,$80,$00,$1e,$00,$00
+        .byte $1e,$00,$00,$1e,$07,$80,$1e,$07
+        .byte $80,$1f,$ff,$80,$1f,$ff,$80,$01
+
+        // sprite 20 / singlecolor / color: $01
+        ascii51:
+        .byte $00,$00,$00,$07,$fe,$00,$07,$fe
+        .byte $00,$1e,$07,$80,$1e,$07,$80,$00
+        .byte $07,$80,$00,$07,$80,$00,$07,$80
+        .byte $00,$07,$80,$01,$fe,$00,$01,$fe
+        .byte $00,$00,$07,$80,$00,$07,$80,$00
+        .byte $07,$80,$00,$07,$80,$00,$07,$80
+        .byte $00,$07,$80,$1e,$07,$80,$1e,$07
+        .byte $80,$07,$fe,$00,$07,$fe,$00,$01
+
+        // sprite 21 / singlecolor / color: $01
+        ascii52:
+        .byte $00,$00,$00,$00,$1e,$00,$00,$1e
+        .byte $00,$00,$7e,$00,$00,$7e,$00,$01
+        .byte $fe,$00,$01,$fe,$00,$07,$9e,$00
+        .byte $07,$9e,$00,$1e,$1e,$00,$1e,$1e
+        .byte $00,$1f,$ff,$80,$1f,$ff,$80,$00
         .byte $1e,$00,$00,$1e,$00,$00,$1e,$00
         .byte $00,$1e,$00,$00,$1e,$00,$00,$1e
         .byte $00,$00,$7f,$80,$00,$7f,$80,$01
 
-        // sprite 21 / singlecolor / color: $01
-        sprite_data_u:
-        .byte $00,$00,$00,$07,$81,$e0,$07,$81
-        .byte $e0,$07,$81,$e0,$07,$81,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$81,$e0,$07,$81
-        .byte $e0,$07,$81,$e0,$07,$81,$e0,$07
-        .byte $81,$e0,$07,$81,$e0,$07,$81,$e0
-        .byte $07,$81,$e0,$07,$81,$e0,$07,$81
-        .byte $e0,$01,$ff,$80,$01,$ff,$80,$01
+        // sprite 22 / singlecolor / color: $01
+        ascii53:
+        .byte $00,$00,$00,$1f,$ff,$80,$1f,$ff
+        .byte $80,$1e,$00,$00,$1e,$00,$00,$1e
+        .byte $00,$00,$1e,$00,$00,$1e,$00,$00
+        .byte $1e,$00,$00,$1f,$fe,$00,$1f,$fe
+        .byte $00,$00,$07,$80,$00,$07,$80,$00
+        .byte $07,$80,$00,$07,$80,$00,$07,$80
+        .byte $00,$07,$80,$1e,$07,$80,$1e,$07
+        .byte $80,$07,$fe,$00,$07,$fe,$00,$01
 
-        // sprite 22 / multicolor / color: $01
-        sprite_data_v:
-        .byte $00,$00,$00,$05,$00,$50,$05,$00
-        .byte $50,$05,$00,$50,$05,$00,$50,$05
-        .byte $00,$50,$05,$00,$50,$05,$00,$50
-        .byte $05,$00,$50,$05,$00,$50,$05,$00
-        .byte $50,$05,$00,$50,$05,$00,$50,$05
-        .byte $00,$50,$05,$00,$50,$01,$41,$40
-        .byte $01,$41,$40,$00,$55,$00,$00,$55
-        .byte $00,$00,$14,$00,$00,$14,$00,$81
+        // sprite 23 / singlecolor / color: $01
+        ascii54:
+        .byte $00,$00,$00,$01,$f8,$00,$01,$f8
+        .byte $00,$07,$80,$00,$07,$80,$00,$1e
+        .byte $00,$00,$1e,$00,$00,$1e,$00,$00
+        .byte $1e,$00,$00,$1f,$fe,$00,$1f,$fe
+        .byte $00,$1e,$07,$80,$1e,$07,$80,$1e
+        .byte $07,$80,$1e,$07,$80,$1e,$07,$80
+        .byte $1e,$07,$80,$1e,$07,$80,$1e,$07
+        .byte $80,$07,$fe,$00,$07,$fe,$00,$01
 
-        // sprite 23 / multicolor / color: $01
-        sprite_data_w:
-        .byte $00,$00,$00,$05,$00,$50,$05,$00
-        .byte $50,$05,$00,$50,$05,$00,$50,$05
-        .byte $00,$50,$05,$00,$50,$05,$00,$50
-        .byte $05,$00,$50,$05,$00,$50,$05,$00
-        .byte $50,$05,$14,$50,$05,$14,$50,$05
-        .byte $14,$50,$05,$14,$50,$05,$55,$50
-        .byte $05,$55,$50,$01,$41,$40,$01,$41
-        .byte $40,$01,$41,$40,$01,$41,$40,$81
+        // sprite 24 / singlecolor / color: $01
+        ascii55:
+        .byte $00,$00,$00,$1f,$ff,$80,$1f,$ff
+        .byte $80,$1e,$07,$80,$1e,$07,$80,$00
+        .byte $07,$80,$00,$07,$80,$00,$07,$80
+        .byte $00,$07,$80,$00,$1e,$00,$00,$1e
+        .byte $00,$00,$78,$00,$00,$78,$00,$01
+        .byte $e0,$00,$01,$e0,$00,$01,$e0,$00
+        .byte $01,$e0,$00,$01,$e0,$00,$01,$e0
+        .byte $00,$01,$e0,$00,$01,$e0,$00,$01
 
-        // sprite 24 / multicolor / color: $01
-        sprite_data_x:
-        .byte $00,$00,$00,$05,$00,$50,$05,$00
-        .byte $50,$05,$00,$50,$05,$00,$50,$01
-        .byte $41,$40,$01,$41,$40,$00,$55,$00
-        .byte $00,$55,$00,$00,$14,$00,$00,$14
-        .byte $00,$00,$14,$00,$00,$14,$00,$00
-        .byte $55,$00,$00,$55,$00,$01,$41,$40
-        .byte $01,$41,$40,$05,$00,$50,$05,$00
-        .byte $50,$05,$00,$50,$05,$00,$50,$81
+        // sprite 25 / singlecolor / color: $01
+        ascii56:
+        .byte $00,$00,$00,$07,$fe,$00,$07,$fe
+        .byte $00,$1e,$07,$80,$1e,$07,$80,$1e
+        .byte $07,$80,$1e,$07,$80,$1e,$07,$80
+        .byte $1e,$07,$80,$07,$fe,$00,$07,$fe
+        .byte $00,$1e,$07,$80,$1e,$07,$80,$1e
+        .byte $07,$80,$1e,$07,$80,$1e,$07,$80
+        .byte $1e,$07,$80,$1e,$07,$80,$1e,$07
+        .byte $80,$07,$fe,$00,$07,$fe,$00,$01
 
-        // sprite 25 / multicolor / color: $01
-        sprite_data_y:
-        .byte $00,$00,$00,$05,$00,$50,$05,$00
-        .byte $50,$05,$00,$50,$05,$00,$50,$05
-        .byte $00,$50,$05,$00,$50,$01,$41,$40
-        .byte $01,$41,$40,$00,$55,$00,$00,$55
-        .byte $00,$00,$14,$00,$00,$14,$00,$00
-        .byte $14,$00,$00,$14,$00,$00,$14,$00
-        .byte $00,$14,$00,$00,$14,$00,$00,$14
-        .byte $00,$00,$55,$00,$00,$55,$00,$81
+        // sprite 26 / singlecolor / color: $01
+        ascii57:
+        .byte $00,$00,$00,$07,$fe,$00,$07,$fe
+        .byte $00,$1e,$07,$80,$1e,$07,$80,$1e
+        .byte $07,$80,$1e,$07,$80,$1e,$07,$80
+        .byte $1e,$07,$80,$07,$ff,$80,$07,$ff
+        .byte $80,$00,$07,$80,$00,$07,$80,$00
+        .byte $07,$80,$00,$07,$80,$00,$07,$80
+        .byte $00,$07,$80,$00,$1e,$00,$00,$1e
+        .byte $00,$07,$f8,$00,$07,$f8,$00,$01
 
-        // sprite 26 / multicolor / color: $01
-        sprite_data_z:
-        .byte $00,$00,$00,$05,$55,$50,$05,$55
-        .byte $50,$05,$00,$50,$05,$00,$50,$04
-        .byte $01,$40,$04,$01,$40,$00,$05,$00
-        .byte $00,$05,$00,$00,$14,$00,$00,$14
-        .byte $00,$00,$50,$00,$00,$50,$00,$01
-        .byte $40,$00,$01,$40,$00,$05,$00,$10
-        .byte $05,$00,$10,$05,$00,$50,$05,$00
-        .byte $50,$05,$55,$50,$05,$55,$50,$81
+        // sprite 27 / singlecolor / color: $01
+        ascii58:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $78,$00,$00,$78,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$78,$00,$00,$78
+        .byte $00,$00,$00,$00,$00,$00,$00,$01
+
+        // sprite 28 / singlecolor / color: $01
+        ascii59:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $78,$00,$00,$78,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$78,$00,$00,$78
+        .byte $00,$01,$e0,$00,$01,$e0,$00,$01
+
+        // sprite 29 / singlecolor / color: $01
+        ascii60:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$07,$80,$00,$07,$80,$00
+        .byte $1e,$00,$00,$1e,$00,$00,$78,$00
+        .byte $00,$78,$00,$01,$e0,$00,$01,$e0
+        .byte $00,$07,$80,$00,$07,$80,$00,$01
+        .byte $e0,$00,$01,$e0,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$1e,$00,$00,$1e
+        .byte $00,$00,$07,$80,$00,$07,$80,$01
+
+        // sprite 30 / singlecolor / color: $01
+        ascii61:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$07,$ff,$80
+        .byte $07,$ff,$80,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$07
+        .byte $ff,$80,$07,$ff,$80,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$01
+
+        // sprite 31 / singlecolor / color: $01
+        ascii62:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$07,$80,$00,$07,$80,$00,$01
+        .byte $e0,$00,$01,$e0,$00,$00,$78,$00
+        .byte $00,$78,$00,$00,$1e,$00,$00,$1e
+        .byte $00,$00,$07,$80,$00,$07,$80,$00
+        .byte $1e,$00,$00,$1e,$00,$00,$78,$00
+        .byte $00,$78,$00,$01,$e0,$00,$01,$e0
+        .byte $00,$07,$80,$00,$07,$80,$00,$01
+
+        // sprite 32 / singlecolor / color: $01
+        ascii63:
+        .byte $00,$00,$00,$07,$fe,$00,$07,$fe
+        .byte $00,$1e,$07,$80,$1e,$07,$80,$1e
+        .byte $07,$80,$1e,$07,$80,$00,$1e,$00
+        .byte $00,$1e,$00,$00,$78,$00,$00,$78
+        .byte $00,$00,$78,$00,$00,$78,$00,$00
+        .byte $78,$00,$00,$78,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$78,$00,$00,$78
+        .byte $00,$00,$78,$00,$00,$78,$00,$01
+
+        // sprite 33 / singlecolor / color: $01
+        ascii64:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$03,$ff,$00,$03,$ff,$00,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$3f,$c0,$0f,$3f
+        .byte $c0,$0f,$3f,$c0,$0f,$3f,$c0,$0f
+        .byte $3f,$c0,$0f,$3f,$c0,$0f,$3f,$00
+        .byte $0f,$3f,$00,$0f,$00,$00,$0f,$00
+        .byte $00,$03,$ff,$00,$03,$ff,$00,$01
+
+        // sprite 34 / singlecolor / color: $01
+        ascii65:
+        .byte $00,$00,$00,$00,$30,$00,$00,$30
+        .byte $00,$00,$fc,$00,$00,$fc,$00,$03
+        .byte $cf,$00,$03,$cf,$00,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$03,$c0,$0f,$03
+        .byte $c0,$0f,$ff,$c0,$0f,$ff,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$03,$c0,$0f,$03
+        .byte $c0,$0f,$03,$c0,$0f,$03,$c0,$01
+
+        // sprite 35 / singlecolor / color: $01
+        ascii66:
+        .byte $00,$00,$00,$0f,$ff,$00,$0f,$ff
+        .byte $00,$03,$c3,$c0,$03,$c3,$c0,$03
+        .byte $c3,$c0,$03,$c3,$c0,$03,$c3,$c0
+        .byte $03,$c3,$c0,$03,$ff,$00,$03,$ff
+        .byte $00,$03,$c3,$c0,$03,$c3,$c0,$03
+        .byte $c3,$c0,$03,$c3,$c0,$03,$c3,$c0
+        .byte $03,$c3,$c0,$03,$c3,$c0,$03,$c3
+        .byte $c0,$0f,$ff,$00,$0f,$ff,$00,$01
+
+        // sprite 36 / singlecolor / color: $01
+        ascii67:
+        .byte $00,$00,$00,$00,$ff,$00,$00,$ff
+        .byte $00,$03,$c3,$c0,$03,$c3,$c0,$0f
+        .byte $00,$c0,$0f,$00,$c0,$0f,$00,$00
+        .byte $0f,$00,$00,$0f,$00,$00,$0f,$00
+        .byte $00,$0f,$00,$00,$0f,$00,$00,$0f
+        .byte $00,$00,$0f,$00,$00,$0f,$00,$c0
+        .byte $0f,$00,$c0,$03,$c3,$c0,$03,$c3
+        .byte $c0,$00,$ff,$00,$00,$ff,$00,$01
+
+        // sprite 37 / singlecolor / color: $01
+        ascii68:
+        .byte $00,$00,$00,$0f,$fc,$00,$0f,$fc
+        .byte $00,$03,$cf,$00,$03,$cf,$00,$03
+        .byte $c3,$c0,$03,$c3,$c0,$03,$c3,$c0
+        .byte $03,$c3,$c0,$03,$c3,$c0,$03,$c3
+        .byte $c0,$03,$c3,$c0,$03,$c3,$c0,$03
+        .byte $c3,$c0,$03,$c3,$c0,$03,$c3,$c0
+        .byte $03,$c3,$c0,$03,$cf,$00,$03,$cf
+        .byte $00,$0f,$fc,$00,$0f,$fc,$00,$01
+
+        // sprite 38 / singlecolor / color: $01
+        ascii69:
+        .byte $00,$00,$00,$0f,$ff,$c0,$0f,$ff
+        .byte $c0,$03,$c3,$c0,$03,$c3,$c0,$03
+        .byte $c0,$c0,$03,$c0,$c0,$03,$cc,$00
+        .byte $03,$cc,$00,$03,$fc,$00,$03,$fc
+        .byte $00,$03,$cc,$00,$03,$cc,$00,$03
+        .byte $c0,$00,$03,$c0,$00,$03,$c0,$c0
+        .byte $03,$c0,$c0,$03,$c3,$c0,$03,$c3
+        .byte $c0,$0f,$ff,$c0,$0f,$ff,$c0,$01
+
+        // sprite 39 / singlecolor / color: $01
+        ascii70:
+        .byte $00,$00,$00,$0f,$ff,$c0,$0f,$ff
+        .byte $c0,$03,$c3,$c0,$03,$c3,$c0,$03
+        .byte $c0,$c0,$03,$c0,$c0,$03,$cc,$00
+        .byte $03,$cc,$00,$03,$fc,$00,$03,$fc
+        .byte $00,$03,$cc,$00,$03,$cc,$00,$03
+        .byte $c0,$00,$03,$c0,$00,$03,$c0,$00
+        .byte $03,$c0,$00,$03,$c0,$00,$03,$c0
+        .byte $00,$0f,$f0,$00,$0f,$f0,$00,$01
+
+        // sprite 40 / singlecolor / color: $01
+        ascii71:
+        .byte $00,$00,$00,$00,$ff,$00,$00,$ff
+        .byte $00,$03,$c3,$c0,$03,$c3,$c0,$0f
+        .byte $00,$c0,$0f,$00,$c0,$0f,$00,$00
+        .byte $0f,$00,$00,$0f,$00,$00,$0f,$00
+        .byte $00,$0f,$3f,$c0,$0f,$3f,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$03,$c3,$c0,$03,$c3
+        .byte $c0,$00,$fc,$c0,$00,$fc,$c0,$01
+
+        // sprite 41 / singlecolor / color: $01
+        ascii72:
+        .byte $00,$00,$00,$0f,$03,$c0,$0f,$03
+        .byte $c0,$0f,$03,$c0,$0f,$03,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$ff,$c0,$0f,$ff
+        .byte $c0,$0f,$03,$c0,$0f,$03,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$03,$c0,$0f,$03
+        .byte $c0,$0f,$03,$c0,$0f,$03,$c0,$01
+
+        // sprite 42 / singlecolor / color: $01
+        ascii73:
+        .byte $00,$00,$00,$00,$ff,$00,$00,$ff
+        .byte $00,$00,$3c,$00,$00,$3c,$00,$00
+        .byte $3c,$00,$00,$3c,$00,$00,$3c,$00
+        .byte $00,$3c,$00,$00,$3c,$00,$00,$3c
+        .byte $00,$00,$3c,$00,$00,$3c,$00,$00
+        .byte $3c,$00,$00,$3c,$00,$00,$3c,$00
+        .byte $00,$3c,$00,$00,$3c,$00,$00,$3c
+        .byte $00,$00,$ff,$00,$00,$ff,$00,$01
+
+        // sprite 43 / singlecolor / color: $01
+        ascii74:
+        .byte $00,$00,$00,$00,$3f,$c0,$00,$3f
+        .byte $c0,$00,$0f,$00,$00,$0f,$00,$00
+        .byte $0f,$00,$00,$0f,$00,$00,$0f,$00
+        .byte $00,$0f,$00,$00,$0f,$00,$00,$0f
+        .byte $00,$00,$0f,$00,$00,$0f,$00,$0f
+        .byte $0f,$00,$0f,$0f,$00,$0f,$0f,$00
+        .byte $0f,$0f,$00,$0f,$0f,$00,$0f,$0f
+        .byte $00,$03,$fc,$00,$03,$fc,$00,$01
+
+        // sprite 44 / singlecolor / color: $01
+        ascii75:
+        .byte $00,$00,$00,$0f,$c3,$c0,$0f,$c3
+        .byte $c0,$03,$c3,$c0,$03,$c3,$c0,$03
+        .byte $c3,$c0,$03,$c3,$c0,$03,$cf,$00
+        .byte $03,$cf,$00,$03,$fc,$00,$03,$fc
+        .byte $00,$03,$fc,$00,$03,$fc,$00,$03
+        .byte $cf,$00,$03,$cf,$00,$03,$c3,$c0
+        .byte $03,$c3,$c0,$03,$c3,$c0,$03,$c3
+        .byte $c0,$0f,$c3,$c0,$0f,$c3,$c0,$01
+
+        // sprite 45 / singlecolor / color: $01
+        ascii76:
+        .byte $00,$00,$00,$0f,$f0,$00,$0f,$f0
+        .byte $00,$03,$c0,$00,$03,$c0,$00,$03
+        .byte $c0,$00,$03,$c0,$00,$03,$c0,$00
+        .byte $03,$c0,$00,$03,$c0,$00,$03,$c0
+        .byte $00,$03,$c0,$00,$03,$c0,$00,$03
+        .byte $c0,$00,$03,$c0,$00,$03,$c0,$c0
+        .byte $03,$c0,$c0,$03,$c3,$c0,$03,$c3
+        .byte $c0,$0f,$ff,$c0,$0f,$ff,$c0,$01
+
+        // sprite 46 / singlecolor / color: $01
+        ascii77:
+        .byte $00,$00,$00,$0f,$00,$f0,$0f,$00
+        .byte $f0,$0f,$c3,$f0,$0f,$c3,$f0,$0f
+        .byte $ff,$f0,$0f,$ff,$f0,$0f,$ff,$f0
+        .byte $0f,$ff,$f0,$0f,$3c,$f0,$0f,$3c
+        .byte $f0,$0f,$00,$f0,$0f,$00,$f0,$0f
+        .byte $00,$f0,$0f,$00,$f0,$0f,$00,$f0
+        .byte $0f,$00,$f0,$0f,$00,$f0,$0f,$00
+        .byte $f0,$0f,$00,$f0,$0f,$00,$f0,$01
+
+        // sprite 47 / singlecolor / color: $01
+        ascii78:
+        .byte $00,$00,$00,$0f,$03,$c0,$0f,$03
+        .byte $c0,$0f,$c3,$c0,$0f,$c3,$c0,$0f
+        .byte $f3,$c0,$0f,$f3,$c0,$0f,$ff,$c0
+        .byte $0f,$ff,$c0,$0f,$3f,$c0,$0f,$3f
+        .byte $c0,$0f,$0f,$c0,$0f,$0f,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$03,$c0,$0f,$03
+        .byte $c0,$0f,$03,$c0,$0f,$03,$c0,$01
+
+        // sprite 48 / singlecolor / color: $01
+        ascii79:
+        .byte $00,$00,$00,$03,$ff,$00,$03,$ff
+        .byte $00,$0f,$03,$c0,$0f,$03,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$03,$c0,$0f,$03
+        .byte $c0,$0f,$03,$c0,$0f,$03,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$03,$c0,$0f,$03
+        .byte $c0,$03,$ff,$00,$03,$ff,$00,$01
+
+        // sprite 49 / singlecolor / color: $01
+        ascii80:
+        .byte $00,$00,$00,$0f,$ff,$00,$0f,$ff
+        .byte $00,$03,$c3,$c0,$03,$c3,$c0,$03
+        .byte $c3,$c0,$03,$c3,$c0,$03,$c3,$c0
+        .byte $03,$c3,$c0,$03,$ff,$00,$03,$ff
+        .byte $00,$03,$c0,$00,$03,$c0,$00,$03
+        .byte $c0,$00,$03,$c0,$00,$03,$c0,$00
+        .byte $03,$c0,$00,$03,$c0,$00,$03,$c0
+        .byte $00,$0f,$f0,$00,$0f,$f0,$00,$01
+
+        // sprite 50 / singlecolor / color: $01
+        ascii81:
+        .byte $00,$00,$00,$03,$ff,$00,$03,$ff
+        .byte $00,$0f,$03,$c0,$0f,$03,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$03,$c0,$0f,$03
+        .byte $c0,$0f,$33,$c0,$0f,$33,$c0,$0f
+        .byte $3f,$c0,$0f,$3f,$c0,$03,$ff,$00
+        .byte $03,$ff,$00,$00,$0f,$00,$00,$0f
+        .byte $00,$00,$0f,$c0,$00,$0f,$c0,$01
+
+        // sprite 51 / singlecolor / color: $01
+        ascii82:
+        .byte $00,$00,$00,$0f,$ff,$00,$0f,$ff
+        .byte $00,$03,$c3,$c0,$03,$c3,$c0,$03
+        .byte $c3,$c0,$03,$c3,$c0,$03,$c3,$c0
+        .byte $03,$c3,$c0,$03,$ff,$00,$03,$ff
+        .byte $00,$03,$cf,$00,$03,$cf,$00,$03
+        .byte $c3,$c0,$03,$c3,$c0,$03,$c3,$c0
+        .byte $03,$c3,$c0,$03,$c3,$c0,$03,$c3
+        .byte $c0,$0f,$c3,$c0,$0f,$c3,$c0,$01
+
+        // sprite 52 / singlecolor / color: $01
+        ascii83:
+        .byte $00,$00,$00,$03,$ff,$00,$03,$ff
+        .byte $00,$0f,$03,$c0,$0f,$03,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$03,$c0,$00
+        .byte $03,$c0,$00,$00,$fc,$00,$00,$fc
+        .byte $00,$00,$0f,$00,$00,$0f,$00,$00
+        .byte $03,$c0,$00,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$03,$c0,$0f,$03
+        .byte $c0,$03,$ff,$00,$03,$ff,$00,$01
+
+        // sprite 53 / singlecolor / color: $01
+        ascii84:
+        .byte $00,$00,$00,$0f,$ff,$f0,$0f,$ff
+        .byte $f0,$0f,$3c,$f0,$0f,$3c,$f0,$0c
+        .byte $3c,$30,$0c,$3c,$30,$00,$3c,$00
+        .byte $00,$3c,$00,$00,$3c,$00,$00,$3c
+        .byte $00,$00,$3c,$00,$00,$3c,$00,$00
+        .byte $3c,$00,$00,$3c,$00,$00,$3c,$00
+        .byte $00,$3c,$00,$00,$3c,$00,$00,$3c
+        .byte $00,$00,$ff,$00,$00,$ff,$00,$01
+
+        // sprite 54 / singlecolor / color: $01
+        ascii85:
+        .byte $00,$00,$00,$0f,$03,$c0,$0f,$03
+        .byte $c0,$0f,$03,$c0,$0f,$03,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$03,$c0,$0f,$03
+        .byte $c0,$0f,$03,$c0,$0f,$03,$c0,$0f
+        .byte $03,$c0,$0f,$03,$c0,$0f,$03,$c0
+        .byte $0f,$03,$c0,$0f,$03,$c0,$0f,$03
+        .byte $c0,$03,$ff,$00,$03,$ff,$00,$01
+
+        // sprite 55 / singlecolor / color: $01
+        ascii86:
+        .byte $00,$00,$00,$0f,$00,$f0,$0f,$00
+        .byte $f0,$0f,$00,$f0,$0f,$00,$f0,$0f
+        .byte $00,$f0,$0f,$00,$f0,$0f,$00,$f0
+        .byte $0f,$00,$f0,$0f,$00,$f0,$0f,$00
+        .byte $f0,$0f,$00,$f0,$0f,$00,$f0,$0f
+        .byte $00,$f0,$0f,$00,$f0,$03,$c3,$c0
+        .byte $03,$c3,$c0,$00,$ff,$00,$00,$ff
+        .byte $00,$00,$3c,$00,$00,$3c,$00,$01
+
+        // sprite 56 / singlecolor / color: $01
+        ascii87:
+        .byte $00,$00,$00,$0f,$00,$f0,$0f,$00
+        .byte $f0,$0f,$00,$f0,$0f,$00,$f0,$0f
+        .byte $00,$f0,$0f,$00,$f0,$0f,$00,$f0
+        .byte $0f,$00,$f0,$0f,$00,$f0,$0f,$00
+        .byte $f0,$0f,$3c,$f0,$0f,$3c,$f0,$0f
+        .byte $3c,$f0,$0f,$3c,$f0,$0f,$ff,$f0
+        .byte $0f,$ff,$f0,$03,$c3,$c0,$03,$c3
+        .byte $c0,$03,$c3,$c0,$03,$c3,$c0,$01
+
+        // sprite 57 / singlecolor / color: $01
+        ascii88:
+        .byte $00,$00,$00,$0f,$00,$f0,$0f,$00
+        .byte $f0,$0f,$00,$f0,$0f,$00,$f0,$03
+        .byte $c3,$c0,$03,$c3,$c0,$00,$ff,$00
+        .byte $00,$ff,$00,$00,$3c,$00,$00,$3c
+        .byte $00,$00,$3c,$00,$00,$3c,$00,$00
+        .byte $ff,$00,$00,$ff,$00,$03,$c3,$c0
+        .byte $03,$c3,$c0,$0f,$00,$f0,$0f,$00
+        .byte $f0,$0f,$00,$f0,$0f,$00,$f0,$01
+
+        // sprite 58 / singlecolor / color: $01
+        ascii89:
+        .byte $00,$00,$00,$0f,$00,$f0,$0f,$00
+        .byte $f0,$0f,$00,$f0,$0f,$00,$f0,$0f
+        .byte $00,$f0,$0f,$00,$f0,$03,$c3,$c0
+        .byte $03,$c3,$c0,$00,$ff,$00,$00,$ff
+        .byte $00,$00,$3c,$00,$00,$3c,$00,$00
+        .byte $3c,$00,$00,$3c,$00,$00,$3c,$00
+        .byte $00,$3c,$00,$00,$3c,$00,$00,$3c
+        .byte $00,$00,$ff,$00,$00,$ff,$00,$01
+
+        // sprite 59 / singlecolor / color: $01
+        ascii90:
+        .byte $00,$00,$00,$0f,$ff,$f0,$0f,$ff
+        .byte $f0,$0f,$00,$f0,$0f,$00,$f0,$0c
+        .byte $03,$c0,$0c,$03,$c0,$00,$0f,$00
+        .byte $00,$0f,$00,$00,$3c,$00,$00,$3c
+        .byte $00,$00,$f0,$00,$00,$f0,$00,$03
+        .byte $c0,$00,$03,$c0,$00,$0f,$00,$30
+        .byte $0f,$00,$30,$0f,$00,$f0,$0f,$00
+        .byte $f0,$0f,$ff,$f0,$0f,$ff,$f0,$01
+
+        // sprite 60 / singlecolor / color: $01
+        ascii91:
+        .byte $00,$00,$00,$00,$ff,$00,$00,$ff
+        .byte $00,$00,$f0,$00,$00,$f0,$00,$00
+        .byte $f0,$00,$00,$f0,$00,$00,$f0,$00
+        .byte $00,$f0,$00,$00,$f0,$00,$00,$f0
+        .byte $00,$00,$f0,$00,$00,$f0,$00,$00
+        .byte $f0,$00,$00,$f0,$00,$00,$f0,$00
+        .byte $00,$f0,$00,$00,$f0,$00,$00,$f0
+        .byte $00,$00,$ff,$00,$00,$ff,$00,$01
+
+        // sprite 61 / singlecolor / color: $01
+        ascii92:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$0c,$00,$00,$0c,$00,$00,$0f
+        .byte $00,$00,$0f,$00,$00,$0f,$c0,$00
+        .byte $0f,$c0,$00,$03,$f0,$00,$03,$f0
+        .byte $00,$00,$fc,$00,$00,$fc,$00,$00
+        .byte $3f,$00,$00,$3f,$00,$00,$0f,$c0
+        .byte $00,$0f,$c0,$00,$03,$c0,$00,$03
+        .byte $c0,$00,$00,$c0,$00,$00,$c0,$01
+
+        // sprite 62 / singlecolor / color: $01
+        ascii93:
+        .byte $00,$00,$00,$00,$ff,$00,$00,$ff
+        .byte $00,$00,$0f,$00,$00,$0f,$00,$00
+        .byte $0f,$00,$00,$0f,$00,$00,$0f,$00
+        .byte $00,$0f,$00,$00,$0f,$00,$00,$0f
+        .byte $00,$00,$0f,$00,$00,$0f,$00,$00
+        .byte $0f,$00,$00,$0f,$00,$00,$0f,$00
+        .byte $00,$0f,$00,$00,$0f,$00,$00,$0f
+        .byte $00,$00,$ff,$00,$00,$ff,$00,$01
+
+        // sprite 63 / singlecolor / color: $01
+        ascii94:
+        .byte $00,$00,$00,$00,$00,$00,$00,$30
+        .byte $00,$00,$30,$00,$00,$fc,$00,$00
+        .byte $fc,$00,$03,$cf,$00,$03,$cf,$00
+        .byte $0f,$03,$c0,$0f,$03,$c0,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$01
+
+        // sprite 64 / singlecolor / color: $01
+        ascii95:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$00,$00,$00,$00,$00,$00,$00
+        .byte $00,$0f,$ff,$f0,$0f,$ff,$f0,$01
 
 
         *=$1000 "Textdata"
@@ -797,12 +1198,38 @@ txtfontattrib:
 txtemptyblock:  // Can be printed five times to fill the entire screen.
         .fill 200, ' '
         .byte 0
+txtscroller1:
+        .text "DEAR MOUNTAINBYTES 2026! GREETINGS FROM THE WORKSHOP - THANKS FOR WELCOMING US NOOBZ!       "
+        .byte 0
+txtscroller2:
+        .text "THIS IS NOT AN AD - HERE, WE CALL THOSE INTROS, RIGHT?        "
+        .byte 0
+txtscroller3:
+        .text "THERE IS A NEW VINTAGE COMPUTER PLAYGROUND OPENING SOON, HIGH UP NORTH IN THE SHIRE, IN SCHAFFHAUSEN.        "
+        .byte 0
 
 
-        *=$3000 "Tables"
+        *=$3800 "Tables"
 sinetable:
         .fill 256, 177 + 30*sin(toRadians(i*360/256))
 flatsine:
         .fill 256, 3.5 + 3.5*sin(toRadians(i*720/256))
 sprites_start_x: // Spaced out in steps of 73 pixels
         .fill 8, i*73
+sprites_bitmasks: // For easier accessing of single-sprit bits, double-indexed
+        .byte %00000001
+        .byte %00000001
+        .byte %00000010
+        .byte %00000010
+        .byte %00000100
+        .byte %00000100
+        .byte %00001000
+        .byte %00001000
+        .byte %00010000
+        .byte %00010000
+        .byte %00100000
+        .byte %00100000
+        .byte %01000000
+        .byte %01000000
+        .byte %10000000
+        .byte %10000000
