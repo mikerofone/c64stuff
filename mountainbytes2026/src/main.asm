@@ -1,4 +1,4 @@
-BasicUpstart2(init)
+BasicUpstart2(text_init)
 
 .const screen_base = $0400
 .const char_tile_color_base = $D800
@@ -62,7 +62,7 @@ BasicUpstart2(init)
 
         *=$4000 "Code"
 
-init:
+text_init:
         // Init color.
         lda #12
         sta border_color_addr           // Border to black.
@@ -175,22 +175,13 @@ once_pre_loop:
         // Reset font parameters
         lda #1
         sta zpb_color
-        //jsr textcycle
-        // ldx #0
-        // lda #72
-        // jsr set_sprite_to_char
 
-        // ldx #1
-        // lda #42
-        // jsr set_sprite_to_char
+        jsr static_disk1
 
-        // ldx #2
-        // lda #82
-        // jsr set_sprite_to_char
 main_loop:
         //TODO do stuff
         ldx #1
-        jsr wait
+        jsr sleep
         inc zpb_delayctr                // Increment delaycounter. Intended to simply overflow back to 0.
         lda zpb_delayctr
         cmp #2
@@ -280,9 +271,10 @@ sprite_step:
         cmp #0
         bne !print+
         // End of string, loop back
-        ldy #0;
-        sty zpb_next_char_index
-        lda txtscroller1,Y
+        // ldy #0;
+        // sty zpb_next_char_index
+        // lda txtscroller1,Y
+        jsr start
 !print:
         jsr set_sprite_to_char
         inc zpb_next_char_index
@@ -303,7 +295,7 @@ textcycle:
         //jsr cycle_color
 
         ldx #1
-        jsr wait
+        jsr sleep
         rts
 
 // Cycles colors through 1-16.
@@ -434,7 +426,7 @@ clearscreen:
         rts
 
 // Waits for a while, determined by value in X.
-wait:
+sleep:
 !loop:
         cpx #00
         beq !end+
@@ -1194,7 +1186,7 @@ endstring:
         .byte $00,$0f,$ff,$f0,$0f,$ff,$f0,$01
 
 
-        *=$1000 "Textdata"
+        *=$3B00 "Textdata"
 txtstart:
 txtwebsite:
         .text "diskette.ch"
@@ -1245,3 +1237,7 @@ list_of_scrollers:
         .word txtscroller2
         .word txtscroller3
         .byte 0
+
+
+#import "../disk2.asm"
+#import "../static-disk.asm"

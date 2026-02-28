@@ -12,22 +12,8 @@
 .disk [filename="MyDisk.d64"]
 {
 }
+//BasicUpstart2(start)
 
-*=$0801 "BASIC Start"  // location to put a 1 line basic program so we can just
-        // type run to execute the assembled program.
-        // will just call assembled program at correct location
-        //    10 SYS (4096)
-
-        // These bytes are a one line basic program that will 
-        // do a sys call to assembly language portion of
-        // of the program which will be at $1000 or 4096 decimal
-        // basic line is: 
-        // 10 SYS (4096)
-        .byte $0E, $08           // Forward address to next basic line
-        .byte $0A, $00           // this will be line 10 ($0A)
-        .byte $9E                // basic token for SYS
-        .byte $20, $28, $34, $30, $39, $36, $29 // ASCII for " (4096)"
-        .byte $00, $00, $00      // end of basic program (addr $080E from above)
 
 
         // assembler constants for special memory locations
@@ -70,9 +56,9 @@ sprite2:
 
 
 
-start:
 // our assembly code will goto this address
-*=$1000 "Main Start"
+*=$6000 "Main Start"
+start:
 
         // c64 colors
         .const C64_COLOR_BLACK = $00
@@ -95,24 +81,24 @@ start:
         .const SPRITE_ENABLE_REG_ADDR = $d015 // each bit turns on one of the sprites lsb is sprite 0, msb is sprite 7
         .const SPRITE_COLOR_1_ADDR = $D025 // address of color for sprite bits that are binary 01
         .const SPRITE_COLOR_2_ADDR = $D026 // address of color for sprite bits that are binary 11
-        
-        .const SPRITE_0_DATA_PTR_ADDR = $07F8  // address of the pointer to sprite_0's data its only 8 bits 
-                                               // so its implied that this value will be multipled by 64 
+
+        .const SPRITE_0_DATA_PTR_ADDR = $07F8  // address of the pointer to sprite_0's data its only 8 bits
+                                               // so its implied that this value will be multipled by 64
         .const SPRITE_0_X_ADDR = $D000
         .const SPRITE_0_Y_ADDR = $D001
 
-        .const SPRITE_1_DATA_PTR_ADDR = $07F9  // address of the pointer to sprite_0's data its only 8 bits 
-                                               // so its implied that this value will be multipled by 64 
+        .const SPRITE_1_DATA_PTR_ADDR = $07F9  // address of the pointer to sprite_0's data its only 8 bits
+                                               // so its implied that this value will be multipled by 64
         .const SPRITE_1_X_ADDR = $D002
         .const SPRITE_1_Y_ADDR = $D003
 
         // register with one bit for each sprite to indicate high res (one color)
         // or multi color.  Bit 0 (lsb) corresponds to sprite 0
         // set bit to 1 for multi color, or 0 for high res (one color mode)
-        .const SPRITE_MODE_REG_ADDR = $D01C 
+        .const SPRITE_MODE_REG_ADDR = $D01C
 
         // since there are more than 255 x locations across the screen
-        // the high bit for each sprite's X location is gathered in the 
+        // the high bit for each sprite's X location is gathered in the
         // byte here.  sprite_0's ninth bit is bit 0 of the byte at this addr.
         .const ALL_SPRITE_X_HIGH_BIT_ADDR = $D010
 
@@ -126,23 +112,23 @@ start:
 
         //////////////////////////////////////////////////////////////////////
         // clear screeen leave cursor upper left
-        jsr CLEAR_SCREEN_KERNAL_ADDR 
-        
+        jsr CLEAR_SCREEN_KERNAL_ADDR
+
         //////////////////////////////////////////////////////////////////////
         // Setup and display our two sprites
         // the steps are:
-        // Step 1: Set the global multi color sprite colors for 
+        // Step 1: Set the global multi color sprite colors for
         //         the sprite_ship multi color sprite (sprite_0)
         // Step 2: Setup sprite_0 aka sprite_ship
-        //   2a: Set the sprite mode for the sprite to multi color or 
+        //   2a: Set the sprite mode for the sprite to multi color or
         //         high res (one color).  This sprite is multi color
-        //   2b: Set the sprite data pointer for sprite 0 to the 64 bytes 
+        //   2b: Set the sprite data pointer for sprite 0 to the 64 bytes
         //       at label sprite_ship
-        //   2c: Set the distinct color for sprite_ship 
+        //   2c: Set the distinct color for sprite_ship
         // Step 3: Setup sprite_1 aka sprite_astroid
         //   3a: Set the sprite mode for sprite_astroid to multi color
-        //       or high res (one color).  This sprite is high res 
-        //   3b: Set the sprite data pointer for sprite 1 to the 
+        //       or high res (one color).  This sprite is high res
+        //   3b: Set the sprite data pointer for sprite 1 to the
         //       64 bytes at sprite_astroid label.
         //   3c: Set the individual sprite color for sprite 1
         // Step 4 Enable the sprites
@@ -150,7 +136,7 @@ start:
 
         ////// step 1: Set the two global colors for multi color sprites /////
         // here setting colors using the color const, but spritemate
-        // will save similar code using literal values 
+        // will save similar code using literal values
         lda #C64_COLOR_LITE_GREEN // multicolor sprites global color 1
         sta SPRITE_COLOR_1_ADDR   // can also get this from spritemate
         lda #C64_COLOR_WHITE      // multicolor sprites global color 2
@@ -169,7 +155,7 @@ start:
 
         lda #$F0                // load mask in A, checking for any ones in high nibble
         bit sprite_ship + 63       // set Zero flag if the masked bits are all 0s
-                                // if any masked bits in the last byte of sprite_0 are set 
+                                // if any masked bits in the last byte of sprite_0 are set
                                 // then its a multi colored sprite
         beq skip_multicolor_0     // if Zero is set, ie no masked bits were set, then branch
                                 // to skip multi color mode.
@@ -177,7 +163,7 @@ start:
         // If we didn't skip the multi color, then set sprite 0 to muli color mode
         lda SPRITE_MODE_REG_ADDR // load current contents of sprite mode reg
         ora #$01                 // set bit for sprite 0 (bit 0) to 1 for multi color
-        sta SPRITE_MODE_REG_ADDR // leave other bits untouched for sprites 1-7 
+        sta SPRITE_MODE_REG_ADDR // leave other bits untouched for sprites 1-7
 skip_multicolor_0:
         ////// Step 2a done ///////////////////////////////////////////////////
 
@@ -187,12 +173,12 @@ skip_multicolor_0:
         ////// step 2b done ///////////////////////////////////////////////////
 
         ////// step 2c: set sprite_ship unique color /////////////////////////
-        // set this sprite's color.  
+        // set this sprite's color.
         lda sprite_ship + 63            // The color is the low nibble of the
-                                        // last byte of sprite. We'll just 
+                                        // last byte of sprite. We'll just
                                         // write the whole byte because the
                                         // only lo 4 bits of reg are writable
-        sta SPRITE_0_COLOR_REG_ADDR     
+        sta SPRITE_0_COLOR_REG_ADDR
         ////// step 2c done //////////////////////////////////////////////////
 
         //
@@ -212,7 +198,7 @@ skip_multicolor_0:
 
         lda #$F0                // load mask in A, checking for any ones in high nibble
         bit sprite_astroid + 63 // set Zero flag if the masked bits are all 0s
-                                // if any masked bits in the last byte of sprite_0 are set 
+                                // if any masked bits in the last byte of sprite_0 are set
                                 // then its a multi colored sprite
         beq skip_multicolor_1     // if Zero is set, ie no masked bits were set, then branch
                                 // to skip multi color mode.
@@ -220,7 +206,7 @@ skip_multicolor_0:
         // If we didn't skip the multi color, then set sprite 0 to muli color mode
         lda SPRITE_MODE_REG_ADDR // load current contents of sprite mode reg
         ora #$02                 // set bit for sprite 1 (bit 1) to 1 for multi color
-        sta SPRITE_MODE_REG_ADDR // leave other bits untouched for sprites 1-7 
+        sta SPRITE_MODE_REG_ADDR // leave other bits untouched for sprites 1-7
 skip_multicolor_1:
         ////// Step 3a done ///////////////////////////////////////////////////
 
@@ -230,20 +216,20 @@ skip_multicolor_1:
         ////// step 3b done ///////////////////////////////////////////////////
 
         ////// step 3c: set sprite_ship unique color /////////////////////////
-        // set this sprite's color.  
+        // set this sprite's color.
         lda sprite_astroid + 63            // The color is the low nibble of the
-                                        // last byte of sprite. We'll just 
+                                        // last byte of sprite. We'll just
                                         // write the whole byte because the
                                         // only lo 4 bits of reg are writable
-        sta SPRITE_1_COLOR_REG_ADDR     
+        sta SPRITE_1_COLOR_REG_ADDR
         ////// step 3c done //////////////////////////////////////////////////
 
 
         ////// step 4: enable both sprites /////////////////////////////////////////
         lda SPRITE_ENABLE_REG_ADDR      // load with sprite enabled reg
-        ora #$03                        // set the bit for sprite 0, 
+        ora #$03                        // set the bit for sprite 0,
                                         // Leaving other bits untouched
-        sta SPRITE_ENABLE_REG_ADDR      // store to sprite enable register 
+        sta SPRITE_ENABLE_REG_ADDR      // store to sprite enable register
                                         // one bit for each sprite.
         ////// step 4 done ///////////////////////////////////////////////////
 
@@ -299,7 +285,7 @@ mainloop:
     jsr disk4
     jsr vshift8
 */
-    jsr wait 
+    jsr wait
     jmp mainloop
 
 
@@ -373,11 +359,11 @@ vshiftr8:
 
 wait:
     lda #3
-    sta SPRITE_ENABLE_REG_ADDR      // store to sprite enable register 
+    sta SPRITE_ENABLE_REG_ADDR      // store to sprite enable register
     lda #1
     jsr JIFFWAIT
     lda #0
-    sta SPRITE_ENABLE_REG_ADDR      // store to sprite enable register 
+    sta SPRITE_ENABLE_REG_ADDR      // store to sprite enable register
     rts
 
 disk1:
@@ -522,7 +508,7 @@ disk4_loop:
 
 /*
     WAIT_KEY:
-    jsr $FFE4        // Calling KERNAL GETIN 
+    jsr $FFE4        // Calling KERNAL GETIN
     beq WAIT_KEY     //; If Z, no key was pressed, so try again.
                      //; The key is in A
     sta $0403
@@ -534,7 +520,7 @@ disk4_loop:
     */
     //stx $0401
 
-// lda #$fb 
+// lda #$fb
 
     //clc
     //adc	#1
@@ -547,7 +533,7 @@ disk4_loop:
 
 /*
     WAIT_KEY:
-    jsr $FFE4        // Calling KERNAL GETIN 
+    jsr $FFE4        // Calling KERNAL GETIN
     beq WAIT_KEY     //; If Z, no key was pressed, so try again.
                      //; The key is in A
     sta $0403
@@ -588,11 +574,11 @@ vshift:
     and #7
     cmp #7
     bne fff
-    
+
     lda $d011
     clc
     sbc #7
-   
+
     sta $d011
 
 fff:
@@ -608,16 +594,16 @@ vshiftr:
     and #7
     cmp #0
     bne fffr
-    
+
     lda $d011
     clc
     adc #7
-   
+
     sta $d011
 
 fffr:
     ldx	$d011
-    dex 
+    dex
     stx $d011
 
     rts
@@ -628,11 +614,11 @@ hshift:
     and #7
     cmp #7
     bne fff2
-    
+
     lda $d016
     clc
     sbc #7
-   
+
     sta $d016
 
 fff2:
@@ -647,13 +633,13 @@ hshiftr:
     and #7
     cmp #0
     bne fff2r
-    
+
     lda $d016
     //and #%11111000
     //and #%00011111
     clc
     adc #7
-   
+
     sta $d016
 
 fff2r:
@@ -667,7 +653,7 @@ rts
 
 // Subroutine to wait for 0 to 4.25 seconds
 // called using JSR with
-// time to wait in A in 1/60 seconds 
+// time to wait in A in 1/60 seconds
 JIFFWAIT:
          clc
          adc   $A2          // Add time to wait to 'now'
