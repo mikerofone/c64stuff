@@ -1,0 +1,17 @@
+Diskette invites you to the Shire
+
+C64 invitation for Die Diskette Vintage-Computer Ausstellung
+
+Credits:
+* mikerofone: code, gfx
+* dominikr: code, gfx
+* Chris Wemyss (Atlantis, 2022): music
+* VileR (int10h.org): VGA font
+
+Tools used:
+* Kick assembler
+* Vice
+* Visual Code Studio
+* vim
+* Marq's PETSCII editor (allows PNG in background as reference)
+* Petmate (another PETSCII editor, allows fullscreen edit & export to ASM)
