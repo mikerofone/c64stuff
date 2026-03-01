@@ -11,7 +11,8 @@ Credits:
 Tools used:
 * Kick assembler
 * Vice
-* Visual Code Studio
+* Visual Studio Code
 * vim
 * Marq's PETSCII editor (allows PNG in background as reference)
 * Petmate (another PETSCII editor, allows fullscreen edit & export to ASM)
+* Spritemate and GIMP for converting the VGAfont glyphs into sprites
