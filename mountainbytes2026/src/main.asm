@@ -232,9 +232,9 @@ delayed_main_loop:
 // -------------- FOR MUSIC HANDLING --------------
 irq1:
         asl $d019
-        inc $d020
+        //inc $d020
         jsr music.play
-        dec $d020
+        //dec $d020
         pla
         tay
         pla

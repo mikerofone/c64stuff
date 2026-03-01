@@ -261,6 +261,7 @@ skip_multicolor_1:
         ////// step 5 done ///////////////////////////////////////////////////
     //jsr load_diskette
 
+    jsr disk1
 
 mainloop:
 
@@ -269,20 +270,23 @@ mainloop:
 
     //jsr vshift
     jsr vreset
-    jsr disk1
+    //jsr disk1
     jsr hshift8
+    jsr wait
 
     jsr hreset
-    jsr disk2
+    //jsr disk2
     //jsr hshiftr8
     jsr vshift8
+    jsr wait
 
     jsr vreset
-    jsr disk3
+    //jsr disk3
     jsr hshiftr8
+    jsr wait
 
     jsr hreset
-    jsr disk4
+    //jsr disk4
     jsr vshiftr8
 
 /*
@@ -364,9 +368,10 @@ vshiftr8:
 wait:
     lda #3
     sta SPRITE_ENABLE_REG_ADDR      // store to sprite enable register
-    lda #1
-    ldx #1
-    jsr sleep
+    lda #10
+    jsr JIFFWAIT
+    //ldx #10
+    //jsr sleep
     jsr wait_for_next_frame
     lda #0
     sta SPRITE_ENABLE_REG_ADDR      // store to sprite enable register
