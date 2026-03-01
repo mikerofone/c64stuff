@@ -215,12 +215,11 @@ once_pre_loop:
         jsr printtext
 
 main_loop:
-        //TODO do stuff
         ldx #1
         jsr sleep
         inc zpb_delayctr                // Increment delaycounter. Intended to simply overflow back to 0.
         lda zpb_delayctr
-        cmp #2
+        cmp #1
         bne main_loop
 delayed_main_loop:
         // Stuff that should happen when timer reached target
@@ -378,77 +377,6 @@ end_of_texts:
 !end:
         rts
 
-textcycle:
-        lda #<txtwebsite
-        sta zpw_textaddr
-        lda #>txtwebsite
-        sta zpw_textaddr+1
-        jsr printtext
-        // Move cursor right by # chars printed.
-        jsr advance_cursor
-        //jsr update_coords
-        //jsr down_one_line?
-        //jsr cycle_color
-
-        ldx #1
-        jsr sleep
-        rts
-
-// Cycles colors through 1-16.
-cycle_color:
-        lda zpb_color
-        sta border_color_addr           // Border to previous color.
-        ldx #01
-        ldy #16
-        jsr add_and_clamp
-        sta zpb_color
-        bne !+                          // If zero (black), skip over black and white.
-        inc zpb_color
-        inc zpb_color
-!:
-        rts
-
-// Gets row and col from zpb_targetrow/zpb_targetcol, increments them
-// by some value and clamping to range, and writes them back.
-update_coords:
-        // lda zpb_targetrow
-        // ldx #03
-        // ldy #25
-        // jsr add_and_clamp
-        // sta zpb_targetrow
-        lda zpb_targetcol
-        ldx #07
-        ldy #40                 // Bug: should be ldy, but results in
-                                // more interesting output. ¯\_(ツ)_/¯
-        jsr add_and_clamp
-        sta zpb_targetcol
-        jsr set_cursor_xy       // Update zpw_cursoraddr from zpb_targetcol/row.
-        rts
-
-
-// Move the cursor to zpb_targetrow and zpb_targetcol.
-// Clobbers A, X, Y.
-set_cursor_xy:
-        lda #00                 // Reset cursor to 0.
-        sta zpw_cursoraddr
-        sta zpw_cursoraddr+1
-        ldx zpb_targetrow       // Load rows to add.
-add_rows:
-        cpx #00                 // Test if more rows.
-        beq add_cols            // If none, skip.
-        dex
-        lda #40                 // Advance cursor by one row of chars.
-        jsr advance_cursor
-        jmp add_rows
-add_cols:
-        lda zpb_targetcol       // Advance cursor by column-many chars.
-        jsr advance_cursor
-        rts
-
-// Move cursor down one line, wrapping around the screen. Clobbers A, Y.
-down_one_line:
-        lda #40
-        // Continue into advance_cursor.
 // Moves cursor right by the amount of characters in A. Clobbers A, Y.
 // Wraps around the screen.
 advance_cursor:
@@ -482,21 +410,6 @@ must_wrap:
 !return:
         rts
 
-
-// Have value to inc in A, amount to inc in X and max value in Y.
-// Returns new value in A.
-// Will return garbage if A+X>255.
-add_and_clamp:
-        stx zpb_tempval
-        clc
-        adc zpb_tempval
-        // A now is A+X
-        sty zpb_tempval
-        cmp zpb_tempval // Will set carry if A>=zpb_tempval
-        bcc !return+    // A+X < Y, so return.
-        sbc zpb_tempval // A=A-Y
-!return:
-        rts
 
 // Fills the screen with spaces. Clobbers zpb_textaddr and resets cursor address to 0.
 clearscreen:
@@ -1304,13 +1217,13 @@ txtemptyblock:  // Can be printed five times to fill the entire screen.
         .fill 200, ' '
         .byte 0
 txtscroller1:
-        .text "DEAR MOUNTAINBYTES 2026! GREETINGS FROM THE WORKSHOP - DOMINIKR AND MIKEROFONE HAD A TON OF FUN!          SO, WHY THAT DISKETTE, YOU ASK?!       OR, MAYBE YOU DON'T.       WE'LL TELL YOU ANYWAY.          "
+        .text "DEAR MOUNTAINBYTES 2026! DOMINIKR AND MIKEROFONE SEND GREETINGS FROM THE WORKSHOP!          AND IF YOU LIKE OLD COMPUTERS, HERE'S A TIP FOR YOU...        "
         .byte 0
 txtscroller2:
-        .text "(THIS IS NOT AN AD - HERE WE CALL IT <AN INVITATION> RIGHT? :P )            MIKEROFONE IS OPENING A VINTAGE COMPUTER PLAYGROUND, <DIE DISKETTE>, HIGH UP NORTH IN THE SHIRE, IN SCHAFFHAUSEN.       HE'D LIKE TO INVITE YOU TO ITS GRAND OPENING!          "
+        .text "THIS IS NOT AN AD - WE CALL THESE <INVITATIONS> RIGHT? :P        <DIE DISKETTE>, A VINTAGE COMPUTER PLAYGROUND IN SCHAFFHAUSEN, HAS ITS GRAND OPENING ON SATURDAY 14TH MARCH!        "
         .byte 0
 txtscroller3:
-        .text "ON 14TH MARCH 2026, IT OPENS FOR THE FIRST TIME, FROM 11:00 TO 18:00, SHOWING PORTABLE COMPUTERS SINCE 1980. THEY ARE RUNNING AND EAGER FOR YOU TO EXPLORE THEM.     ADMISSION IS FREE!    FIND ALL DETAILS ON DISKETTE.CH.     THANK YOU! <3 <3         "
+        .text "PLAY WITH WORKING PORTABLE COMPUTERS SINCE 1980.     ADMISSION IS FREE!    CHECK OUT DISKETTE.CH     THANK YOU AND UNTIL NEXT TIME! <3 <3             "
         .byte 0
 
 
