@@ -54,7 +54,7 @@ BasicUpstart2(text_init)
 
 // Sprite flags
 .const zpb_num_sprites = res_zpb()      // Global: Number of sprites to use
-.const zpb_current_text_index = res_zpw()  // Global: Index into list_of_scrollers to select which text to display
+.const zpb_current_text_index = res_zpb()  // Global: Index into list_of_scrollers to select which text to display
 .const zpb_next_char_index = res_zpb()  // Global: Next character from the string to use in the snek
 
 // Main animation counters.
@@ -101,7 +101,6 @@ text_init:
         sta zpb_sine_table_idx
         sta zpb_current_text_index
         sta zpb_next_char_index
-        lda <list_of_scrollers
         jsr clearscreen
 create_sprites:
         // Load sprite data from consecutive 64-bytes segments starting at $2040
@@ -190,7 +189,19 @@ once_pre_loop:
 
         jsr static_disk1
 
-        // Font attribution text in bottom right corner
+        // Attribution texts in bottom right corner
+        lda #$9C
+        sta zpw_cursoraddr
+        lda #$03
+        sta zpw_cursoraddr+1
+        lda #11
+        sta zpb_color
+        lda #<txtmusicattrib
+        sta zpw_textaddr
+        lda #>txtmusicattrib
+        sta zpw_textaddr+1
+        jsr printtext
+
         lda #$CB
         sta zpw_cursoraddr
         lda #$03
@@ -289,7 +300,7 @@ sprite_step:
         sec                             // Set borrow
         sbc #1                          // Will CLEAR carry if underflow
         sta sprite_base_pos,Y
-        bcs !end+
+        bcs !gotoend+
         // If underflow, then invert hibyte and set lobyte to respective max value for middle or right of screen.
         lda sprite_xpos_highbyte
         eor sprites_bitmasks,Y
@@ -300,24 +311,56 @@ sprite_step:
         lda #140
         sta sprite_base_pos,Y
         // Character respawns - update to next char from text
-        // ldy zpb_current_text_index
-        // lda list_of_scrollers,Y
-        // ldy zpb_next_char_index
-        // lda (list_of_scrollers,Y)
+        ldy zpb_current_text_index
+        cpy #0
+        bne !nexttext+
         ldy zpb_next_char_index
         lda txtscroller1,Y
         cmp #0
         bne !print+
-        // End of string, loop back
+        // End of string, loop back and select next text, if any.
+        jmp selectnexttext
+!nexttext:
+        dey
+        cpy #0
+        bne !nexttext+
+        ldy zpb_next_char_index
+        lda txtscroller2,Y
+        cmp #0
+        bne !print+
+        // End of string, loop back and select next text, if any.
+        jmp selectnexttext
+!gotoend:
+        jmp !end+
+!nexttext:
+        // Third text is the last text.
+        ldy zpb_next_char_index
+        lda txtscroller3,Y
+        cmp #0
+        bne !print+
+        // End of last string go to final segment.
+        jmp end_of_texts
+selectnexttext:
+        lda #$ED
+        sta zpw_cursoraddr
+        lda #$01
+        sta zpw_cursoraddr+1
+        lda #13
+        sta zpb_color
+        lda #<txturl
+        sta zpw_textaddr
+        lda #>txturl
+        sta zpw_textaddr+1
+        jsr printtext
         ldy #0;
         sty zpb_next_char_index
+        // Skip to next text
         ldy zpb_current_text_index
         iny
-        lda (list_of_scrollers),y
-        beq end_of_texts                // Null byte -> end of strings
-
-
-        lda txtscroller1,Y
+        sty zpb_current_text_index
+        lda 32                          // Load a space
+        jsr set_sprite_to_char
+        jmp !end+
 
         // Disable SID chip by killing the voices and setting the volume to 0
 end_of_texts:
@@ -1251,27 +1294,29 @@ txtfontattrib:
         .text "vga font by viler int10h.org"
         .byte 0
 txtmusicattrib:
-        .text "song 'Hybris' by Chris Wemyss (ATL)"
+        .text "song 'hybris' by chris wemyss (atl)"
+        .byte 0
+txturl:
+        .text "diskette.ch"
         .byte 0
 
 txtemptyblock:  // Can be printed five times to fill the entire screen.
         .fill 200, ' '
         .byte 0
 txtscroller1:
-        //dominikr
-        .text "DEAR MOUNTAINBYTES 2026! GREETINGS FROM THE WORKSHOP - DOMINIKR AND MIKEROFONE HAD A TON OF FUN!       "
+        .text "DEAR MOUNTAINBYTES 2026! GREETINGS FROM THE WORKSHOP - DOMINIKR AND MIKEROFONE HAD A TON OF FUN!          SO, WHY THAT DISKETTE, YOU ASK?!       OR, MAYBE YOU DON'T.       WE'LL TELL YOU ANYWAY.          "
         .byte 0
 txtscroller2:
-        .text "THIS IS NOT AN AD - HERE, WE CALL THOSE INTROS, RIGHT?        "
+        .text "(THIS IS NOT AN AD - HERE WE CALL IT <AN INVITATION> RIGHT? :P )            MIKEROFONE IS OPENING A VINTAGE COMPUTER PLAYGROUND, <DIE DISKETTE>, HIGH UP NORTH IN THE SHIRE, IN SCHAFFHAUSEN.       HE'D LIKE TO INVITE YOU TO ITS GRAND OPENING!          "
         .byte 0
 txtscroller3:
-        .text "THERE IS A NEW VINTAGE COMPUTER PLAYGROUND OPENING SOON, HIGH UP NORTH IN THE SHIRE, IN SCHAFFHAUSEN.        "
+        .text "ON 14TH MARCH 2026, IT OPENS FOR THE FIRST TIME, FROM 11:00 TO 18:00, SHOWING PORTABLE COMPUTERS SINCE 1980. THEY ARE RUNNING AND EAGER FOR YOU TO EXPLORE THEM.     ADMISSION IS FREE!    FIND ALL DETAILS ON DISKETTE.CH.     THANK YOU! <3 <3         "
         .byte 0
 
 
         *=$4800 "Tables"
 sinetable:
-        .fill 256, 177 + 30*sin(toRadians(i*360/256))
+        .fill 256, 185 + 22*sin(toRadians(i*360/256))
 flatsine:
         .fill 256, 3.5 + 3.5*sin(toRadians(i*720/256))
 sprites_start_x: // Spaced out in steps of 73 pixels
