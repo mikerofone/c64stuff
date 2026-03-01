@@ -235,6 +235,10 @@ skip_multicolor_1:
 
 
         ////// step 5: Set Sprite Location ///////////////////////////////////
+	// zero MSB of x coords
+	lda #0
+	sta $d010
+
         // set sprite_ship X loc
         lda #52                // picking X loc at left of screen
         sta SPRITE_0_X_ADDR
