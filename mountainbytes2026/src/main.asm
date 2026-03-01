@@ -1,3 +1,4 @@
+.var music = LoadSid("../Hybris.sid")
 BasicUpstart2(text_init)
 
 .const screen_base = $0400
@@ -60,9 +61,33 @@ BasicUpstart2(text_init)
 .const zpb_delayctr = res_zpb()         // Global: Delay counter that increases every main loop.
 .const zpb_sine_table_idx = res_zpb()   // Global: Index in the sine curve table.
 
-        *=$4000 "Code"
+        *=$5000 "Code"
 
 text_init:
+        // ----------------- MUSIC INIT -----------------
+        ldx #0
+        ldy #0
+        lda #music.startSong-1
+        jsr music.init
+        sei
+        lda #<irq1
+        sta $0314
+        lda #>irq1
+        sta $0315
+        asl $d019
+        lda #$7b
+        sta $dc0d
+        lda #$81
+        sta $d01a
+        lda #$1b
+        sta $d011
+        lda #$80
+        sta $d012
+        cli
+
+        // ---------------- END MUSIC INIT
+
+
         // Init color.
         lda #12
         sta border_color_addr           // Border to black.
@@ -96,7 +121,7 @@ create_sprite:
         beq !done+
 
         // Initially, all sprites point to the first character (space = empty)
-        lda #$81                        // Sprite base address / 64 => $2040/$40=$81
+        lda #$c2                        // Sprite base address / 64 => $2080/$40=$82
         sta sprite_base_pointer_addr,X
 
         // The x/y registers are sequential, so steps of 2 are needed. Multiply X by 2.
@@ -159,6 +184,12 @@ restore_index:
         sta zpb_sine_table_idx
 
 once_pre_loop:
+        // Reset font parameters
+        lda #1
+        sta zpb_color
+
+        jsr static_disk1
+
         // Font attribution text in bottom right corner
         lda #$CB
         sta zpw_cursoraddr
@@ -171,12 +202,6 @@ once_pre_loop:
         lda #>txtfontattrib
         sta zpw_textaddr+1
         jsr printtext
-
-        // Reset font parameters
-        lda #1
-        sta zpb_color
-
-        jsr static_disk1
 
 main_loop:
         //TODO do stuff
@@ -194,6 +219,19 @@ delayed_main_loop:
         jsr spritebounce
         jmp main_loop
 
+// -------------- FOR MUSIC HANDLING --------------
+irq1:
+        asl $d019
+        inc $d020
+        jsr music.play
+        dec $d020
+        pla
+        tay
+        pla
+        tax
+        pla
+        rti
+
 
 // Set sprite with index X to ASCII value in A (range 32-95).
 // X: The sprite to update.
@@ -204,7 +242,7 @@ set_sprite_to_char:
         sec
         sbc #first_ascii_code           // Chop off the first ASCII codes that are not in the table
         clc
-        adc #$81                        // Add the address of the first ascii bitmap
+        adc #$c2                        // Add the address of the first ascii bitmap
         sta sprite_base_pointer_addr,X
         rts
 
@@ -271,9 +309,24 @@ sprite_step:
         cmp #0
         bne !print+
         // End of string, loop back
-        // ldy #0;
-        // sty zpb_next_char_index
-        // lda txtscroller1,Y
+        ldy #0;
+        sty zpb_next_char_index
+        ldy zpb_current_text_index
+        iny
+        lda (list_of_scrollers),y
+        beq end_of_texts                // Null byte -> end of strings
+
+
+        lda txtscroller1,Y
+
+        // Disable SID chip by killing the voices and setting the volume to 0
+end_of_texts:
+        lda #0
+        sta $d418
+        sta $d404
+        sta $d40d
+        sta $d412
+        sei
         jsr start
 !print:
         jsr set_sprite_to_char
@@ -476,7 +529,10 @@ endstring:
         tya                     // Copy # of chars printed from Y to A.
         rts                     // Done, return.
 
-        *=$2040 "Sprites"
+        *=music.location "Music"
+.fill music.size, music.getData(i)
+
+        *=$3080 "Sprites"
 
         // 64 sprites generated with spritemate on 2/28/2026, 9:10:43 PM
         // Byte 64 of each sprite contains multicolor (high nibble) & color (low nibble) information
@@ -1186,7 +1242,7 @@ endstring:
         .byte $00,$0f,$ff,$f0,$0f,$ff,$f0,$01
 
 
-        *=$3B00 "Textdata"
+        *=$4B00 "Textdata"
 txtstart:
 txtwebsite:
         .text "diskette.ch"
@@ -1194,11 +1250,16 @@ txtwebsite:
 txtfontattrib:
         .text "vga font by viler int10h.org"
         .byte 0
+txtmusicattrib:
+        .text "song 'Hybris' by Chris Wemyss (ATL)"
+        .byte 0
+
 txtemptyblock:  // Can be printed five times to fill the entire screen.
         .fill 200, ' '
         .byte 0
 txtscroller1:
-        .text "DEAR MOUNTAINBYTES 2026! GREETINGS FROM THE WORKSHOP - THANKS FOR WELCOMING US NOOBZ!       "
+        //dominikr
+        .text "DEAR MOUNTAINBYTES 2026! GREETINGS FROM THE WORKSHOP - DOMINIKR AND MIKEROFONE HAD A TON OF FUN!       "
         .byte 0
 txtscroller2:
         .text "THIS IS NOT AN AD - HERE, WE CALL THOSE INTROS, RIGHT?        "
@@ -1208,7 +1269,7 @@ txtscroller3:
         .byte 0
 
 
-        *=$3800 "Tables"
+        *=$4800 "Tables"
 sinetable:
         .fill 256, 177 + 30*sin(toRadians(i*360/256))
 flatsine:

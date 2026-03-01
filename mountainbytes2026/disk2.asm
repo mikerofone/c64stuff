@@ -361,7 +361,9 @@ wait:
     lda #3
     sta SPRITE_ENABLE_REG_ADDR      // store to sprite enable register
     lda #1
-    jsr JIFFWAIT
+    ldx #1
+    jsr sleep
+    jsr wait_for_next_frame
     lda #0
     sta SPRITE_ENABLE_REG_ADDR      // store to sprite enable register
     rts
@@ -544,12 +546,12 @@ disk4_loop:
 //jsr wait_for_next_frame
 
 wait_for_next_frame:
-     bit $d011
-     bpl wait_for_next_frame
-     lda $d012
+    bit $d011
+    bpl wait_for_next_frame
+    lda $d012
 f:   cmp $d012
-     bmi f
-     rts
+    bmi f
+    rts
 
 preset:
     jsr vreset
